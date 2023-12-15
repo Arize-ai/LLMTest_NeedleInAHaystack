@@ -49,12 +49,11 @@ The correct answer is rnd_number
 2. Ask the model to retrieve this statement
 3. Iterate over various document depths (where the needle is placed) and context lengths to measure performance
 
-This is the code that backed 
-
 If ran and `save_results = True`, then this script will populate a `result/` directory with evaluation information. Due to potential concurrent requests each new test will be saved as a file.
 
 The key parameters:
 * `needle` - The statement or fact which will be placed in your context ('haystack')
+* `rnd_number_digits`: The number of digits in the random number. Default is 7.
 * `haystack_dir` - The directory which contains the text files to load as background context. Only text files are supported
 * `retrieval_question` - The question with which to retrieve your needle in the background context
 * `results_version` - You may want to run your test multiple times for the same combination of length/depth, change the version number if so
