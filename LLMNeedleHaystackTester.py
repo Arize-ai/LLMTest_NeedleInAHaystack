@@ -18,7 +18,7 @@ import nest_asyncio
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from phoenix.experimental.evals.models import LiteLLMModel
-from classify import llm_classify
+
 import asyncio
 from phoenix.experimental.evals import (
     OpenAIModel,
@@ -55,7 +55,7 @@ class LLMNeedleHaystackTester:
                  model_provider = "OpenAI",
                  #model_provider = "Anthropic",
                  openai_api_key=None,
-                 #anthropic_api_key = None,
+                 anthropic_api_key = None,
                  model_name='gpt-4-1106-preview',
                  #model_name='claude-2.1',
                  save_results = False,
