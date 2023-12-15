@@ -50,6 +50,8 @@ class LLMNeedleHaystackTester:
                  document_depth_percent_interval_type = "linear",
                  model_provider = "OpenAI",
                  #model_provider = "Anthropic",
+                 #model_provider = "Perplexity",
+                 #model_provider = "Anyscale",
                  openai_api_key=None,
                  anthropic_api_key = None,
                  model_name='gpt-4-1106-preview',
@@ -119,7 +121,7 @@ class LLMNeedleHaystackTester:
         if document_depth_percent_interval_type not in [None, "linear", "sigmoid"]:
             raise ValueError("document_depth_percent_interval_type must be either None, 'linear' or 'sigmoid'. If you'd like your own distribution give a list of ints in via document_depth_percent_intervals")
         
-        if model_provider not in ["OpenAI", "Anthropic", "Anyscale"]:
+        if model_provider not in ["OpenAI", "Anthropic", "Anyscale", "Perplexity"]:
             raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
         
         if model_provider == "Anthropic" and "claude" not in model_name:
@@ -152,7 +154,6 @@ class LLMNeedleHaystackTester:
             self.enc = Anthropic().get_tokenizer()
         
         self.model_to_test_description = model_name
-        self.evaluation_model = ChatOpenAI(model="gpt-4", temperature=0, openai_api_key = self.openai_api_key)
 
     def generate_random_number(self, num_digits):
         lower_bound = 10**(num_digits - 1)
