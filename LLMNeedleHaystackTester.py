@@ -6,8 +6,6 @@ import os
 import tiktoken
 import glob
 import json
-from langchain.evaluation import load_evaluator
-from langchain.chat_models import ChatOpenAI
 from anthropic import AsyncAnthropic, Anthropic
 from dotenv import load_dotenv
 import numpy as np
@@ -26,8 +24,6 @@ from phoenix.experimental.evals import (
     llm_classify,
 )
 
-from datetime import datetime, timezone
-import time
 
 load_dotenv()
 
