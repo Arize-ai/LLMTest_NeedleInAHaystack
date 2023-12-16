@@ -1,6 +1,6 @@
 import subprocess
 import sys
-
+import litellm
 from dotenv import load_dotenv
 import os
 import tiktoken
@@ -39,23 +39,26 @@ class LLMNeedleHaystackTester:
                  rnd_number_digits = 7,
                  context_lengths_min = 1000,
                  context_lengths_max = 126000,
-                 #context_lengths_num_intervals = 5,
+                 #context_lengths_num_intervals = 5, #Uncomment for fast testing run
+                 #context_lengths_num_intervals = 10,
                  context_lengths_num_intervals = 35,
                  context_lengths = None,
                  document_depth_percent_min = 0,
                  document_depth_percent_max = 100,
-                 #document_depth_percent_intervals = 5,
+                 #document_depth_percent_intervals = 5, #Uncomment for fast testing run
+                 #document_depth_percent_intervals = 10,
                  document_depth_percent_intervals = 35,
                  document_depth_percents = None,
                  document_depth_percent_interval_type = "linear",
-                 model_provider = "OpenAI",
-                 #model_provider = "Anthropic",
+                 #model_provider = "OpenAI",
+                 model_provider = "Anthropic",
                  #model_provider = "Perplexity",
                  #model_provider = "Anyscale",
+                 anthropic_template_version = "rev2",
                  openai_api_key=None,
                  anthropic_api_key = None,
-                 model_name='gpt-4-1106-preview',
-                 #model_name='claude-2.1',
+                 #model_name='gpt-4-1106-preview',
+                 model_name='claude-2.1',
                  save_results = False,
                  final_context_length_buffer = 200,
                  print_ongoing_status = True):
@@ -97,6 +100,7 @@ class LLMNeedleHaystackTester:
         self.final_context_length_buffer = final_context_length_buffer
         self.print_ongoing_status = print_ongoing_status
         self.model_provider = model_provider
+        self.anthropic_template_version = anthropic_template_version 
         self.testing_results = []
 
         if context_lengths is None:
@@ -145,14 +149,14 @@ class LLMNeedleHaystackTester:
             
         if not self.model_name:
             raise ValueError("model_name must be provided.")
-        
-        if model_provider == "OpenAI":
-            self.model_to_test = AsyncOpenAI(api_key=self.openai_api_key)
-            self.enc = tiktoken.encoding_for_model(self.model_name)
-        elif model_provider == "Anthropic":
-            self.model_to_test = AsyncAnthropic(api_key=self.anthropic_api_key)
+
+        if model_provider == "Anthropic":
             self.enc = Anthropic().get_tokenizer()
-        
+        elif model_provider == "OpenAI":
+            self.enc = tiktoken.encoding_for_model(self.model_name)
+        else:
+            self.enc = tiktoken.encoding_for_model("gpt-4")
+
         self.model_to_test_description = model_name
 
     def generate_random_number(self, num_digits):
@@ -171,7 +175,33 @@ class LLMNeedleHaystackTester:
         async with sem:
             await self.evaluate_and_log(*args)
 
-    ANTHROPIC_TEMPLATE = '''Human: You are a close-reading bot with a great memory who answers questions for users. I'm going to give you the text of some essays. Amidst these essays ("the haystack") I've inserted a sentence ("the needle") that contains an answer to the user's question. Here's the question:
+    ANTHROPIC_TEMPLATE_REV1 = '''
+                You are a helpful AI bot that answers questions for a user. Keep your response short and direct
+
+                Human: <context>
+                {context}
+                </context>
+
+                {question} Don't give information outside the document or repeat your findings. Respond 
+                with "unanswerable" if the information is not available in the context.
+
+                Assistant: Here is the most relevant sentence in the context:
+            '''
+
+    ANTHROPIC_TEMPLATE_REV2 = '''
+                Human: You are a close-reading bot with a great memory who answers questions for users. I'm going to give you the text of some essays. Amidst these essays ("the haystack") I've inserted a sentence ("the needle") that contains an answer to the user's question. Here's the question:
+                <question>{question}</question>
+                Here's the text of the essays. The answer appears in it somewhere.
+                <haystack>
+                {context}
+                </haystack>
+                Now that you've read the context, please answer the user's question, repeated one more time for ease of reference:
+                <question>{question}</question>
+                To do so, first find the sentence from the haystack that contains the answer (there is such a sentence, I promise!) and put it inside <most_relevant_sentence> XML tags. Then, put your answer in <answer> tags. Base your answer strictly on the context, without reference to outside information. Thank you.
+                If you can't find the answer return the single word UNANSWERABLE.
+                Assistant: Here is the most relevant sentence in the context:'''
+
+    ANTHROPIC_TEMPLATE_ORIGINAL = '''Human: You are a close-reading bot with a great memory who answers questions for users. I'm going to give you the text of some essays. Amidst these essays ("the haystack") I've inserted a sentence ("the needle") that contains an answer to the user's question. Here's the question:
                 <question>{question}</question>
                 Here's the text of the essays. The answer appears in it somewhere.
                 <haystack>
@@ -182,8 +212,7 @@ class LLMNeedleHaystackTester:
 
                 To do so, first find the sentence from the haystack that contains the answer (there is such a sentence, I promise!) and put it inside <most_relevant_sentence> XML tags. Then, put your answer in <answer> tags. Base your answer strictly on the context, without reference to outside information. Thank you.
                 If you can't find the answer return the single word UNANSWERABLE.
-                Assistant:
-    '''
+                Assistant:'''
 
     OPENAI_TEMPLATE = '''
                 You are a helpful AI bot that answers questions for a user. Keep your response short and direct.
@@ -217,13 +246,21 @@ class LLMNeedleHaystackTester:
         contexts = []
         #Evaluation of the model performance 
         #Uses Phoenix Evals
-        nest_asyncio.apply() 
         if self.model_provider == "OpenAI":
             model = OpenAIModel(model_name="gpt-4-1106-preview")
             template =self.OPENAI_TEMPLATE
-        else:
+        elif self.model_provider == "Anthropic":
             model = LiteLLMModel(model_name="claude-2.1", temperature=0.0)
-            template =self.ANTHROPIC_TEMPLATE
+            if self.anthropic_template_version == "original":
+                template =self.ANTHROPIC_TEMPLATE_ORIGINAL
+            elif self.anthropic_template_version == "rev1":
+                template =self.ANTHROPIC_TEMPLATE_REV1
+            else:
+                template =self.ANTHROPIC_TEMPLATE_REV2
+        else:
+            model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
+            litellm.set_verbose=True
+            template =self.OPENAI_TEMPLATE
 
         full_context = self.read_context_files()
         for context_length in self.context_lengths:
@@ -252,6 +289,7 @@ class LLMNeedleHaystackTester:
         #The rails are used to search for specific values in the output
         #The output is then classified as either needle_rnd_number, unanswerable, or unparsable
         #This runs a number of threads in parallel speeding up the generation/Evaluation process
+        nest_asyncio.apply()  # Run async
         relevance_classifications = llm_classify(
             dataframe=df,
             template=template,
@@ -261,10 +299,13 @@ class LLMNeedleHaystackTester:
             #provide_explanation=True,
             concurrency=15,
             #Functions will not work for this evaluation as you will give the model the answer
-            use_function_calling_if_available=False 
+            use_function_calling_if_available=False,
+            return_prompt=True,
+            return_response=True, 
+             
         )
-        run_name = self.model_provider + "_" + str(self.context_lengths_num_intervals)  + "_" + str(self.document_depth_percent_intervals) 
-        df['relevance_classifications'] = relevance_classifications
+        run_name = (self.model_name + "_" + str(self.context_lengths_num_intervals)  + "_" + str(self.document_depth_percent_intervals) ).replace("/", "_")
+        df = pd.concat([df, relevance_classifications], axis=1)
         df['score'] = df.apply(lambda row: self.check_row(row), axis=1)
         df.to_csv("save_results_" + run_name + "_.csv")
         self.generate_image(df, run_name)
@@ -305,9 +346,18 @@ class LLMNeedleHaystackTester:
     # Modify the check_row function to accept needle_number
     def check_row(self, row):
         if row['insert_needle']:
-            return 1 if row['relevance_classifications'] == row['needle_rnd_number'] else 10
+            #needle is inserted so check for the needle
+            if row['label'] == row['needle_rnd_number']:
+                return 1
+            elif row['label'] == 'unanswerable':
+                return 10
+            elif row['label'] == 'NOT_PARSABLE':
+                return 5
+            else:
+                return -1
         else:
-            return 1 if row['relevance_classifications'] == 'unanswerable' else 10
+            #needle is not inserted so check for unanswerable
+            return 1 if row['label'] == 'unanswerable' else 10
 
     def create_contexts(self, needle_rnd_number, insert_needle, random_city, trim_context, context_length, depth_percent):
         # Checks to see if you've already checked a length/percent/version.
@@ -369,7 +419,8 @@ class LLMNeedleHaystackTester:
             # Assuming you have a different encoder for Anthropic
             return self.enc.encode(text).ids
         else:
-            raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
+            return self.enc.encode(text)
+            #raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
     
     def insert_needle(self, needle, context, depth_percent, context_length):
         tokens_needle = self.encode_text_to_tokens(needle)
@@ -410,13 +461,14 @@ class LLMNeedleHaystackTester:
 
 
     def get_context_length_in_tokens(self, context):
-        if self.model_provider == "OpenAI":
+        if (self.model_provider == "OpenAI") or ( self.model_provider == "Perplexity"):
             return len(self.enc.encode(context))
         elif self.model_provider == "Anthropic":
             # Assuming you have a different encoder for Anthropic
             return len(self.enc.encode(context).ids)
         else:
-            raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
+            return len(self.enc.encode(context))
+            #raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
 
     def read_context_files(self):
         context = ""
@@ -435,7 +487,8 @@ class LLMNeedleHaystackTester:
             # Assuming you have a different encoder for Anthropic
             return self.enc.encode(context).ids
         else:
-            raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
+            return self.enc.encode(context)
+            #raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
         
     def decode_tokens(self, tokens, context_length=None):
         if self.model_provider == "OpenAI":
@@ -444,7 +497,8 @@ class LLMNeedleHaystackTester:
             # Assuming you have a different decoder for Anthropic
             return self.enc.decode(tokens[:context_length])
         else:
-            raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
+            return self.enc.decode(tokens[:context_length])
+            #raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
 
     def encode_and_trim(self, context, context_length):
         tokens = self.get_tokens_from_context(context)
@@ -454,6 +508,7 @@ class LLMNeedleHaystackTester:
     
 
     def generate_image(self, csv_df, run_name):
+
 
         # File path for saving the plot as a PNG file
         output_png_path = run_name + "_graph.png"  # Replace with your desired file path
@@ -469,11 +524,11 @@ class LLMNeedleHaystackTester:
 
         # Define the red and green colors in RGB format for the custom colormap
         red_rgb = (0.88, 0.22, 0.21)  # A shade of red
-        green_rgb = (0.35, 0.70, 0.30)  # A shade of green
+        orange_rgb = (1.0, 0.55, 0.0)  # A shade of orange
+        green_rgb = (0.36, 0.77, 0.31)  # A shade of green
 
         # Create a custom colormap from red to green, reversed
-        custom_cmap_reversed = LinearSegmentedColormap.from_list("custom_green_red", [green_rgb, red_rgb], N=256)
-
+        custom_cmap_reversed = LinearSegmentedColormap.from_list("custom_red_yellow_green", [green_rgb, orange_rgb, red_rgb], N=256)
         # Normalization object for the colormap
         norm = Normalize(vmin=1, vmax=10)  # Assuming scores are in the range 1 to 10
 
@@ -549,7 +604,7 @@ def install_package(package):
 if __name__ == "__main__":
     #We added the option for the rail to be different on every row to this RC
     #random number for each generation of the context
-    install_package("arize-phoenix==1.9.1rc2")
+    install_package("arize-phoenix==1.9.1rc3")
     #Runs Arize Phoenix Evaluation
     # Tons of defaults set, check out the LLMNeedleHaystackTester's init for more info
     ht = LLMNeedleHaystackTester()
