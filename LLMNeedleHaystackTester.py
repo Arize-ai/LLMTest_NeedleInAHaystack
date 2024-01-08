@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import litellm
 from dotenv import load_dotenv
 import os
@@ -17,7 +15,7 @@ from phoenix.experimental.evals.models import LiteLLMModel
 
 from phoenix.experimental.evals import (
     OpenAIModel,
-    llm_classify,
+    llm_generate,
 )
 
 
@@ -46,15 +44,14 @@ class LLMNeedleHaystackTester:
                  document_depth_percent_intervals = 35,
                  document_depth_percents = None,
                  document_depth_percent_interval_type = "linear",
-                 #model_provider = "OpenAI",
-                 model_provider = "Anthropic",
+                 model_provider = "OpenAI",
+                 #model_provider = "Anthropic",
                  #model_provider = "Perplexity",
                  #model_provider = "Anyscale",
                  anthropic_template_version = "rev2",
                  openai_api_key=None,
                  anthropic_api_key = None,
-                 #model_name='gpt-4-1106-preview',
-                 model_name='claude-2.1',
+                 model_name='gpt-4-1106-preview',
                  save_results = False,
                  final_context_length_buffer = 200,
                  print_ongoing_status = True):
@@ -278,6 +275,25 @@ class LLMNeedleHaystackTester:
         rail_map = [[row['needle_rnd_number'], "UNANSWERABLE"] for index, row in df.iterrows()]
 
 
+        def find_needle_in_haystack(output, row_index):
+            # This is the function that will be called for each row of the dataframe
+            label = "UNANSWERABLE"
+            row = df.iloc[row_index]
+            needle = row['needle_rnd_number']
+            print(f"🔍 Looking for the needle: {needle} in {output}")
+            # If the needle is in the output, then it is answerable
+            if str(needle) in output:
+                print("✅ Found the needle!")
+                label = needle
+            else:
+                # If the needle is not in the output, then it is unanswerable
+                print(f"❌ Did not find the needle. row: {row}, needle: {needle}, output: {output}")
+                label = "UNANSWERABLE"    
+            return {
+                'label': label,
+                'needle': needle
+            }
+
         #This is the core of the Phoenix evaluation
         #It runs the model on every row of the dataframe
         #It looks for columns that are defined in the template question/context
@@ -286,22 +302,21 @@ class LLMNeedleHaystackTester:
         #The output is then classified as either needle_rnd_number, unanswerable, or unparsable
         #This runs a number of threads in parallel speeding up the generation/Evaluation process
         nest_asyncio.apply()  # Run async
-        relevance_classifications = llm_classify(
+        needle_test_results = llm_generate(
             dataframe=df,
             template=template,
             model=model,
-            rails=rail_map,
             verbose=True,
-            #provide_explanation=True,
             concurrency=15,
-            #Functions will not work for this evaluation as you will give the model the answer
-            use_function_calling_if_available=False,
-            return_prompt=True,
-            return_response=True, 
-             
+            # Callback function that will be called for each row of the dataframe
+            # Used to find the needle in the haystack
+            output_parser=find_needle_in_haystack,
+            # These two flags will add the prompt / response to the returned dataframe
+            include_prompt=True,
+            include_response=True,         
         )
         run_name = (self.model_name + "_" + str(self.context_lengths_num_intervals)  + "_" + str(self.document_depth_percent_intervals) ).replace("/", "_")
-        df = pd.concat([df, relevance_classifications], axis=1)
+        df = pd.concat([df, needle_test_results], axis=1)
         df['score'] = df.apply(lambda row: self.check_row(row), axis=1)
         df.to_csv("save_results_" + run_name + "_.csv")
         self.generate_image(df, run_name)
@@ -324,15 +339,15 @@ class LLMNeedleHaystackTester:
             results = self.create_contexts(needle_rnd_number, insert_needle, random_city, trim_context, context_length, depth_percent)
             contexts.append(results)
         df = pd.DataFrame(contexts)
-        rail_map = [[row['needle_rnd_number'], "UNANSWERABLE"] for index, row in df.iterrows()]
-        relevance_classifications = llm_classify(
+        relevance_classifications = llm_generate(
             dataframe=df,
             template=template,
             model=model,
-            rails=rail_map,
             verbose=True,
             concurrency=15,
-            use_function_calling_if_available=False 
+            # Callback function that will be called for each row of the dataframe
+            # Used to find the needle in the haystack
+            output_parser=find_needle_in_haystack,
         )
         print("Negative Test")
         percentage_unanswerable = (relevance_classifications['label'] == 'unanswerable').mean() * 100
@@ -342,6 +357,7 @@ class LLMNeedleHaystackTester:
     # Modify the check_row function to accept needle_number
     def check_row(self, row):
         if row['insert_needle']:
+    
             #needle is inserted so check for the needle
             if row['label'] == row['needle_rnd_number']:
                 return 1
@@ -594,13 +610,9 @@ class LLMNeedleHaystackTester:
             self.print_start_test_summary()
         self.run_test()
 
-def install_package(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
 if __name__ == "__main__":
     #We added the option for the rail to be different on every row to this RC
     #random number for each generation of the context
-    install_package("arize-phoenix==1.9.1rc3")
     #Runs Arize Phoenix Evaluation
     # Tons of defaults set, check out the LLMNeedleHaystackTester's init for more info
     ht = LLMNeedleHaystackTester()
