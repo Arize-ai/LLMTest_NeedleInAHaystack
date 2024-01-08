@@ -16,52 +16,75 @@ import nest_asyncio
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from phoenix.experimental.evals.models import LiteLLMModel
-
+from phoenix.experimental.evals.models.vertex import GeminiModel
 import asyncio
+from phoenix.experimental.evals.utils import snap_to_rail
 from phoenix.experimental.evals import (
     OpenAIModel,
     download_benchmark_dataset,
     llm_classify,
+    llm_generate,
 )
+
+from google.cloud import aiplatform
+import vertexai.preview
+
 
 
 load_dotenv()
+
+
+
 
 class LLMNeedleHaystackTester:
     """
     This class is used to test the LLM Needle Haystack.
     """
     def __init__(self,
+                 ###########################################
+                 ###### UNCOMMMENT only 1 Provider #########
+                 #model_provider = "OpenAI",
+                 #model_provider = "Anthropic",
+                 #model_provider = "Perplexity",
+                 #model_provider = "Anyscale",
+                 #model_provider = "Mistral",
+                 #model_provider = "LiteLLM",
+                 model_provider = "GoogleVertex",
+                 #############################################
+                 ###### UNCOMMMENT only 1 model name #########
+                 #model_name='gpt-4-1106-preview',
+                 #model_name='claude-2.1',
+                 model_name='gemini-pro',
+                 #model_name='gemini-pro-vision',
+                 #model_name='mistral/mistral-medium',
+                 #############################################
                  needle="",
                  haystack_dir="PaulGrahamEssays",
                  retrieval_question="What is the special magic {} number?",
                  results_version = 1,
                  rnd_number_digits = 7,
                  context_lengths_min = 1000,
-                 context_lengths_max = 126000,
+                 context_lengths_max = 28000,
                  #context_lengths_num_intervals = 5, #Uncomment for fast testing run
-                 #context_lengths_num_intervals = 10,
-                 context_lengths_num_intervals = 35,
+                 context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
+                 #context_lengths_num_intervals = 35, #Uncomment for high fidelity run
                  context_lengths = None,
                  document_depth_percent_min = 0,
                  document_depth_percent_max = 100,
                  #document_depth_percent_intervals = 5, #Uncomment for fast testing run
-                 #document_depth_percent_intervals = 10,
-                 document_depth_percent_intervals = 35,
+                 document_depth_percent_intervals = 10, #Nice balance between speed and fidelity
+                 #document_depth_percent_intervals = 35, #Uncomment for high fidelity run
                  document_depth_percents = None,
                  document_depth_percent_interval_type = "linear",
-                 #model_provider = "OpenAI",
-                 model_provider = "Anthropic",
-                 #model_provider = "Perplexity",
-                 #model_provider = "Anyscale",
+                 #google_project='', #Use OS env GOOGLE_PROJECT
+                 #google_location='', #Use OS env GOOGLE_LOCATION
                  anthropic_template_version = "rev2",
                  openai_api_key=None,
                  anthropic_api_key = None,
-                 #model_name='gpt-4-1106-preview',
-                 model_name='claude-2.1',
-                 save_results = False,
+                save_results = False,
                  final_context_length_buffer = 200,
-                 print_ongoing_status = True):
+                 print_ongoing_status = True,
+):
         """        
         :param needle: The needle to be found in the haystack. Default is None.
         :param haystack_dir: The directory of text files to use as background context (or a haystack) in which the needle is to be found. Default is Paul Graham Essays.
@@ -102,6 +125,8 @@ class LLMNeedleHaystackTester:
         self.model_provider = model_provider
         self.anthropic_template_version = anthropic_template_version 
         self.testing_results = []
+        #self.google_project = google_project
+        #self.google_location = google_location
 
         if context_lengths is None:
             if context_lengths_min is None or context_lengths_max is None or context_lengths_num_intervals is None:
@@ -125,7 +150,7 @@ class LLMNeedleHaystackTester:
         if document_depth_percent_interval_type not in [None, "linear", "sigmoid"]:
             raise ValueError("document_depth_percent_interval_type must be either None, 'linear' or 'sigmoid'. If you'd like your own distribution give a list of ints in via document_depth_percent_intervals")
         
-        if model_provider not in ["OpenAI", "Anthropic", "Anyscale", "Perplexity"]:
+        if model_provider not in ["OpenAI", "Anthropic", "Anyscale", "Perplexity", "GoogleVertex", "Mistral", "LiteLLM"]:
             raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
         
         if model_provider == "Anthropic" and "claude" not in model_name:
@@ -157,6 +182,8 @@ class LLMNeedleHaystackTester:
         else:
             self.enc = tiktoken.encoding_for_model("gpt-4")
 
+        self.google_project = os.getenv('GOOGLE_PROJECT')
+        self.google_location = os.getenv('GOOGLE_LOCATION')
         self.model_to_test_description = model_name
 
     def generate_random_number(self, num_digits):
@@ -213,18 +240,29 @@ class LLMNeedleHaystackTester:
                 To do so, first find the sentence from the haystack that contains the answer (there is such a sentence, I promise!) and put it inside <most_relevant_sentence> XML tags. Then, put your answer in <answer> tags. Base your answer strictly on the context, without reference to outside information. Thank you.
                 If you can't find the answer return the single word UNANSWERABLE.
                 Assistant:'''
-
+    
     OPENAI_TEMPLATE = '''
-                You are a helpful AI bot that answers questions for a user. Keep your response short and direct.
-                The following is a set of context and a question that will relate to the context. 
-                #CONTEXT
-                {context}
-                #ENDCONTEXT
+            You are a helpful AI bot that answers questions for a user. Keep your response short and direct.
+            The following is a set of context and a question that will relate to the context. 
+            #CONTEXT
+            {context}
+            #ENDCONTEXT
 
-                #QUESTION
-                {question} Don't give information outside the document or repeat your findings. If the
-                information is not available in the context respond UNANSWERABLE.
-                '''
+            #QUESTION
+            {question} Don't give information outside the document or repeat your findings. If the
+            information is not available in the context respond UNANSWERABLE.
+            '''
+    #The leading spaces in template make a difference so removed them
+    GEMINI_TEMPLATE = '''
+You are a helpful AI bot that answers questions for a user. Keep your response short and direct.
+The following is a set of context and a question that will relate to the context. 
+#CONTEXT
+{context}
+#ENDCONTEXT
+
+#QUESTION
+{question} Don't give information outside the document or repeat your findings. If the
+information is not available in the context respond UNANSWERABLE.'''
     #{question} You are looking for a number from the context. Don't give information outside the document or repeat your findings
 
     RANDOM_NEEDLE_CITIES  = [
@@ -257,9 +295,27 @@ class LLMNeedleHaystackTester:
                 template =self.ANTHROPIC_TEMPLATE_REV1
             else:
                 template =self.ANTHROPIC_TEMPLATE_REV2
+        elif self.model_provider == "LiteLLM":
+            model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
+            template =self.OPENAI_TEMPLATE
+            litellm.set_verbose=True
+            litellm.vertex_project = self.google_project
+            litellm.vertex_location = self.google_location
+
+        elif self.model_provider == "GoogleVertex":
+            template =self.GEMINI_TEMPLATE
+            aiplatform.init(
+                # your Google Cloud Project ID or number
+                # environment default used is not set
+                project=self.google_project,
+
+                # the Vertex AI region you will use
+                # defaults to us-central1
+                location=self.google_location,)
+            model = GeminiModel()
         else:
             model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
-            litellm.set_verbose=True
+            #litellm.set_verbose=True
             template =self.OPENAI_TEMPLATE
 
         full_context = self.read_context_files()
@@ -279,8 +335,26 @@ class LLMNeedleHaystackTester:
         # The rails is used to search outputs for specific values and return a binary value
         # It will remove text such as ",,," or "..." and general strings from outputs
         # It answers needle_rnd_number or unanswerable or unparsable (if both or none exist in output)
-        rail_map = [[row['needle_rnd_number'], "UNANSWERABLE"] for index, row in df.iterrows()]
 
+        def find_needle_in_haystack(output, row_index):
+            # This is the function that will be called for each row of the dataframe
+            row = df.iloc[row_index]
+            needle = row['needle_rnd_number']
+            # The rails is used to search outputs for specific values and returns needle, unsanswerable, or unparsable
+            railed_output = snap_to_rail(output, [needle, "UNANSWERABLE"])
+            print(f"🔍 Looking for the needle: {needle} in {output}")
+            # If the needle is in the output, then it is answerable
+            if needle == railed_output:
+                print("✅ Found the needle! " + needle)
+            else:
+                # If the needle is not in the output, then it is unanswerable
+                print("---------------------------------------------------------------------")
+                print(f"❌ Did not find the needle. needle: {needle}, output: {railed_output}")
+                print(row)
+            return {
+                'label': railed_output,
+                'needle': needle
+            }
 
         #This is the core of the Phoenix evaluation
         #It runs the model on every row of the dataframe
@@ -290,22 +364,21 @@ class LLMNeedleHaystackTester:
         #The output is then classified as either needle_rnd_number, unanswerable, or unparsable
         #This runs a number of threads in parallel speeding up the generation/Evaluation process
         nest_asyncio.apply()  # Run async
-        relevance_classifications = llm_classify(
+        needle_test_results = llm_generate(
             dataframe=df,
             template=template,
             model=model,
-            rails=rail_map,
             verbose=True,
-            #provide_explanation=True,
             concurrency=15,
-            #Functions will not work for this evaluation as you will give the model the answer
-            use_function_calling_if_available=False,
-            return_prompt=True,
-            return_response=True, 
-             
+            # Callback function that will be called for each row of the dataframe
+            # Used to find the needle in the haystack
+            output_parser=find_needle_in_haystack,
+            # These two flags will add the prompt / response to the returned dataframe
+            include_prompt=True,
+            include_response=True,         
         )
-        run_name = (self.model_name + "_" + str(self.context_lengths_num_intervals)  + "_" + str(self.document_depth_percent_intervals) ).replace("/", "_")
-        df = pd.concat([df, relevance_classifications], axis=1)
+        run_name = (self.model_provider + '_' + self.model_name + "_" + str(self.context_lengths_num_intervals)  + "_" + str(self.document_depth_percent_intervals) ).replace("/", "_")
+        df = pd.concat([df, needle_test_results], axis=1)
         df['score'] = df.apply(lambda row: self.check_row(row), axis=1)
         df.to_csv("save_results_" + run_name + "_.csv")
         self.generate_image(df, run_name)
@@ -328,18 +401,23 @@ class LLMNeedleHaystackTester:
             results = self.create_contexts(needle_rnd_number, insert_needle, random_city, trim_context, context_length, depth_percent)
             contexts.append(results)
         df = pd.DataFrame(contexts)
-        rail_map = [[row['needle_rnd_number'], "UNANSWERABLE"] for index, row in df.iterrows()]
-        relevance_classifications = llm_classify(
+       
+        needle_test_results = llm_generate(
             dataframe=df,
             template=template,
             model=model,
-            rails=rail_map,
             verbose=True,
             concurrency=15,
-            use_function_calling_if_available=False 
+            # Callback function that will be called for each row of the dataframe
+            # Used to find the needle in the haystack
+            output_parser=find_needle_in_haystack,
+            # These two flags will add the prompt / response to the returned dataframe
+            include_prompt=True,
+            include_response=True,         
         )
+        
         print("Negative Test")
-        percentage_unanswerable = (relevance_classifications['label'] == 'unanswerable').mean() * 100
+        percentage_unanswerable = (needle_test_results['label'] == 'unanswerable').mean() * 100
         print(f"Percentage of 'unanswerable': {percentage_unanswerable:.2f}%")
         return contexts
 
@@ -354,7 +432,7 @@ class LLMNeedleHaystackTester:
             elif row['label'] == 'NOT_PARSABLE':
                 return 5
             else:
-                return -1
+                return 5
         else:
             #needle is not inserted so check for unanswerable
             return 1 if row['label'] == 'unanswerable' else 10
@@ -602,9 +680,7 @@ def install_package(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
 if __name__ == "__main__":
-    #We added the option for the rail to be different on every row to this RC
-    #random number for each generation of the context
-    install_package("arize-phoenix==1.9.1rc3")
+
     #Runs Arize Phoenix Evaluation
     # Tons of defaults set, check out the LLMNeedleHaystackTester's init for more info
     ht = LLMNeedleHaystackTester()

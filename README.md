@@ -80,5 +80,16 @@ Other Parameters:
 ## OpenAI's GPT-4-Turbo (Run 12/13/2023)
 <img src="https://storage.googleapis.com/arize-assets/phoenix/assets/images/gpt-4_2.png" alt="GPT-4-128 Context Testing" width="800"/>
 
-## Anthropic's Claude 2.1 (Run 12/12/2023)
-<img src="https://storage.googleapis.com/arize-assets/phoenix/assets/images/claude_2_1_3.png" alt="GPT-4-128 Context Testing" width="800"/>
+## Anthropic's Claude 2.1 (Run 12/17/2023)
+Adjusted prompt 
+<img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/anthropic.png" alt="Anthropic Context Testing" width="800"/>
+
+## Gemini 2.1 (Run 12/12/2023)
+<img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/gemini_pro.png" alt="Gemini Context Testing" width="800"/>
+
+
+## Mistral Mixtral Small (1/6/2024)
+<img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/mistral_small.png" alt="Mistral small Context Testing" width="800"/>
+
+## Mistral Medium (1/6/2024)
+<img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/mistral_medium.png" alt="Mistral small Context Testing" width="800"/>
