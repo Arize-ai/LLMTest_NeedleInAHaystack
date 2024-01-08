@@ -6,10 +6,8 @@ import os
 import tiktoken
 import glob
 import json
-from anthropic import AsyncAnthropic, Anthropic
-from dotenv import load_dotenv
+from anthropic import Anthropic
 import numpy as np
-from openai import AsyncOpenAI
 import pandas as pd
 import random
 import nest_asyncio
@@ -17,10 +15,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from phoenix.experimental.evals.models import LiteLLMModel
 
-import asyncio
 from phoenix.experimental.evals import (
     OpenAIModel,
-    download_benchmark_dataset,
     llm_classify,
 )
 
