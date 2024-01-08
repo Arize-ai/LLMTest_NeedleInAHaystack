@@ -272,12 +272,12 @@ class LLMNeedleHaystackTester:
         # The rails is used to search outputs for specific values and return a binary value
         # It will remove text such as ",,," or "..." and general strings from outputs
         # It answers needle_rnd_number or unanswerable or unparsable (if both or none exist in output)
-        rail_map = [[row['needle_rnd_number'], "UNANSWERABLE"] for index, row in df.iterrows()]
+        rail_map = [[row['needle_rnd_number'], "unanswerable"] for index, row in df.iterrows()]
 
 
         def find_needle_in_haystack(output, row_index):
             # This is the function that will be called for each row of the dataframe
-            label = "UNANSWERABLE"
+            label = "unanswerable"
             row = df.iloc[row_index]
             needle = row['needle_rnd_number']
             print(f"🔍 Looking for the needle: {needle} in {output}")
@@ -288,7 +288,7 @@ class LLMNeedleHaystackTester:
             else:
                 # If the needle is not in the output, then it is unanswerable
                 print(f"❌ Did not find the needle. row: {row}, needle: {needle}, output: {output}")
-                label = "UNANSWERABLE"    
+                label = "unanswerable"    
             return {
                 'label': label,
                 'needle': needle
@@ -339,7 +339,7 @@ class LLMNeedleHaystackTester:
             results = self.create_contexts(needle_rnd_number, insert_needle, random_city, trim_context, context_length, depth_percent)
             contexts.append(results)
         df = pd.DataFrame(contexts)
-        relevance_classifications = llm_generate(
+        haystack_test_results = llm_generate(
             dataframe=df,
             template=template,
             model=model,
@@ -350,7 +350,7 @@ class LLMNeedleHaystackTester:
             output_parser=find_needle_in_haystack,
         )
         print("Negative Test")
-        percentage_unanswerable = (relevance_classifications['label'] == 'unanswerable').mean() * 100
+        percentage_unanswerable = (haystack_test_results['label'] == 'unanswerable').mean() * 100
         print(f"Percentage of 'unanswerable': {percentage_unanswerable:.2f}%")
         return contexts
 
