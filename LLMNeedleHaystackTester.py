@@ -237,7 +237,7 @@ class LLMNeedleHaystackTester:
                 If you can't find the answer return the single word UNANSWERABLE.
                 Assistant:'''
     
-    OPENAI_TEMPLATE = '''
+    SIMPLE_TEMPLATE = '''
             You are a helpful AI bot that answers questions for a user. Keep your response short and direct.
             The following is a set of context and a question that will relate to the context. 
             #CONTEXT
@@ -282,7 +282,7 @@ information is not available in the context respond UNANSWERABLE.'''
         #Uses Phoenix Evals
         if self.model_provider == "OpenAI":
             model = OpenAIModel(model_name="gpt-4-1106-preview")
-            template =self.OPENAI_TEMPLATE
+            template =self.SIMPLE_TEMPLATE
         elif self.model_provider == "Anthropic":
             model = LiteLLMModel(model_name="claude-2.1", temperature=0.0)
             if self.anthropic_template_version == "original":
@@ -293,13 +293,13 @@ information is not available in the context respond UNANSWERABLE.'''
                 template =self.ANTHROPIC_TEMPLATE_REV2
         elif self.model_provider == "LiteLLM":
             model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
-            template =self.OPENAI_TEMPLATE
+            template =self.SIMPLE_TEMPLATE
             litellm.set_verbose=True
             litellm.vertex_project = self.google_project
             litellm.vertex_location = self.google_location
 
         elif self.model_provider == "GoogleVertex":
-            template =self.GEMINI_TEMPLATE
+            template =self.SIMPLE_TEMPLATE
             aiplatform.init(
                 # your Google Cloud Project ID or number
                 # environment default used is not set
@@ -312,7 +312,7 @@ information is not available in the context respond UNANSWERABLE.'''
         else:
             model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
             #litellm.set_verbose=True
-            template =self.OPENAI_TEMPLATE
+            template =self.SIMPLE_TEMPLATE
 
         full_context = self.read_context_files()
         for context_length in self.context_lengths:
@@ -403,7 +403,7 @@ information is not available in the context respond UNANSWERABLE.'''
             template=template,
             model=model,
             verbose=True,
-            concurrency=15,
+            concurrency=2,
             # Callback function that will be called for each row of the dataframe
             # Used to find the needle in the haystack
             output_parser=find_needle_in_haystack,
