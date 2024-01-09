@@ -126,6 +126,8 @@ class LLMNeedleHaystackTester:
         #self.google_project = google_project
         #self.google_location = google_location
 
+        print("model_provider: " + model_provider)
+        print("model_name: " + model_name)
         if context_lengths is None:
             if context_lengths_min is None or context_lengths_max is None or context_lengths_num_intervals is None:
                 raise ValueError("Either context_lengths_min, context_lengths_max, context_lengths_intervals need to be filled out OR the context_lengths_list needs to be supplied.")
@@ -157,10 +159,11 @@ class LLMNeedleHaystackTester:
         self.openai_api_key = openai_api_key or os.getenv('OPENAI_API_KEY')
         self.model_name = model_name
 
-        if not self.openai_api_key and not os.getenv('OPENAI_API_KEY'):
-            raise ValueError("Either openai_api_key must be supplied with init, or OPENAI_API_KEY must be in env. Used for evaluation model")
-        else:
-            self.openai_api_key = openai_api_key or os.getenv('OPENAI_API_KEY')
+        if model_provider == "OpenAI":
+            if not self.openai_api_key and not os.getenv('OPENAI_API_KEY'):
+                raise ValueError("Either openai_api_key must be supplied with init, or OPENAI_API_KEY must be in env. Used for evaluation model")
+            else:
+                self.openai_api_key = openai_api_key or os.getenv('OPENAI_API_KEY')
         
         self.anthropic_api_key = anthropic_api_key or os.getenv('ANTHROPIC_API_KEY')
 

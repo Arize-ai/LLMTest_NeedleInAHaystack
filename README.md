@@ -13,20 +13,28 @@ Our goal is to add another level of rigor to the original tests and test more mo
 WHY DOES THIS TEST MATTER?
 Most people are using retrieval to connect private facts or private information into a model's context window. It's the way teams are running LLMs on their private data. The ability for a LLM to make use of this data and recall facts correctly is important for use in RAG.
 
-<img src="https://storage.googleapis.com/arize-assets/phoenix/assets/images/carbon_good.png" width=500 />
+<img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/carbon_small.png" width=500 />
+
 
 ```
 git clone https://github.com/Arize-ai/LLMTest_NeedleInAHaystack.git
+cd LLMTest_NeedleInAHaystack
+
+pip install -r requirements.txt
+
+python LLMNeedleHaystackTester.py
 ```
 
 Setup Environment variables as needed based on desired models to run:
+```
 GOOGLE_PROJECT
 GOOGLE_LOCATION
-MISTRAL_API_KEY
 OPENAI_API_KEY
+ANYSCALE_API_KEY
+MISTRAL_API_KEY
 PERPLEXITYAI_API_KEY
 ANTHROPIC_API_KEY
-
+```
 We've switched out the Evals to use Phoenix:
 https://github.com/Arize-ai/phoenix
 - The Evaluations which in the original took 3-4 days to run now run in 2 hours (Phoenix is fast on batches)
