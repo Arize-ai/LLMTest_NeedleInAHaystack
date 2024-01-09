@@ -37,7 +37,7 @@ ANTHROPIC_API_KEY
 ```
 We've switched out the Evals to use Phoenix:
 https://github.com/Arize-ai/phoenix
-- The Evaluations which in the original took 3-4 days to run now run in 2 hours (Phoenix is fast on batches)
+- The Evaluations which in the original took 3-4 days to run now run in minutes to 1 hours (Phoenix is fast on batches)
 - The Evaluation was modified so that the needle uses a different random number for every generation.
 - We also added a random city, so the question changes as does the random number
 - The random number and city were designed to make sure responses were not cached and retrievals were "real"
@@ -50,7 +50,7 @@ https://github.com/Arize-ai/phoenix
 - Auto generates the PNG Visualization based on the needle haystack
 
 
-Supported model providers: OpenAI, Anthropic, Others coming soon
+Supported model providers: OpenAI, Google Vertex, Anthropic, AnyScale, Perplexity, Mistral 
 
 A simple 'needle in a haystack' analysis to test in-context retrieval ability of long context LLMs.
 
