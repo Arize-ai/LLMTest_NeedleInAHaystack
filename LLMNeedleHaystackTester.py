@@ -17,8 +17,6 @@ import asyncio
 from phoenix.experimental.evals.utils import snap_to_rail
 from phoenix.experimental.evals import (
     OpenAIModel,
-    download_benchmark_dataset,
-    llm_classify,
     llm_generate,
 )
 
@@ -53,6 +51,10 @@ class LLMNeedleHaystackTester:
                  model_name='gemini-pro',
                  #model_name='gemini-pro-vision',
                  #model_name='mistral/mistral-medium',
+                 #model_name='mistral/mistral-small',
+                 #model_name='mistral/mistral-tiny',
+                 #model_name='mistralai/Mistral-7B-Instruct-v0.1'
+                 #model_name='mistralai/Mixtral-8x7B-Instruct-v0.1'
                  #############################################
                  needle="",
                  haystack_dir="PaulGrahamEssays",
@@ -180,6 +182,13 @@ class LLMNeedleHaystackTester:
 
         self.google_project = os.getenv('GOOGLE_PROJECT')
         self.google_location = os.getenv('GOOGLE_LOCATION')
+
+        if model_provider == "GoogleVertex":
+            if not self.google_project:
+                raise ValueError("Either google_project must be supplied with init, or GOOGLE_PROJECT must be in env.")
+            if not self.google_location:
+                raise ValueError("Either google_location must be supplied with init, or GOOGLE_LOCATION must be in env.")
+
         self.model_to_test_description = model_name
 
     def generate_random_number(self, num_digits):

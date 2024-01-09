@@ -47,3 +47,6 @@ arize-phoenix==2.2.1
 litellm==1.16.19
 nest-asyncio==1.5.8
 matplotlib==3.8.2
+google-cloud-aiplatform==1.39.0
+gcloud==0.18.3
+

@@ -19,6 +19,14 @@ Most people are using retrieval to connect private facts or private information 
 git clone https://github.com/Arize-ai/LLMTest_NeedleInAHaystack.git
 ```
 
+Setup Environment variables as needed based on desired models to run:
+GOOGLE_PROJECT
+GOOGLE_LOCATION
+MISTRAL_API_KEY
+OPENAI_API_KEY
+PERPLEXITYAI_API_KEY
+ANTHROPIC_API_KEY
+
 We've switched out the Evals to use Phoenix:
 https://github.com/Arize-ai/phoenix
 - The Evaluations which in the original took 3-4 days to run now run in 2 hours (Phoenix is fast on batches)
@@ -77,10 +85,12 @@ Other Parameters:
 * `final_context_length_buffer` - The amount of context to take off each input to account for system messages and output tokens. This can be more intelligent but using a static value for now. Default 200 tokens.
 * `print_ongoing_status` - Default: True, whether or not to print the status of test as they complete
 
+Choose a provider and a model from that provider by uncommenting the one you want to run from the file.
+
 ## OpenAI's GPT-4-Turbo (Run 12/13/2023)
 <img src="https://storage.googleapis.com/arize-assets/phoenix/assets/images/gpt-4_2.png" alt="GPT-4-128 Context Testing" width="800"/>
 
-## Anthropic's Claude 2.1 (Run 12/17/2023)
+t## Anthropic's Claude 2.1 (Run 12/17/2023)
 Adjusted prompt 
 <img src="https://storage.googleapis.com/arize-assets/fixtures/Embeddings/GENERATIVE/haystack_pics/anthropic.png" alt="Anthropic Context Testing" width="800"/>
 
