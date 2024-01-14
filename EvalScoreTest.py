@@ -33,17 +33,6 @@ load_dotenv()
 
 import os
 
-import os
-
-# os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = "http://127.0.0.1"
-from phoenix.trace.tracer import Tracer
-from phoenix.trace.exporter import HttpExporter
-from phoenix.trace.openai.instrumentor import OpenAIInstrumentor
-
-
-# tracer = Tracer(exporter=HttpExporter())
-# OpenAIInstrumentor(tracer).instrument()
-
 class LLMNumericScoreEvalTester:
     """
     This class is used to test the LLM score Evals
@@ -77,26 +66,22 @@ class LLMNumericScoreEvalTester:
         # model_name='huggingface/microsoft/phi-2',
         #############################################
         ## ERROR MODE Determines the type of test, we support 3
-        #"spelling_errors" or "frustration" or "happiness
-        error_mode="spelling_errors", 
+        #"spelling_errors" or "frustration" or "sadness
+        error_mode="frustration", 
         #range options: 1_to_10, 0_to_1, -1_to_1
         eval_score_range="-1_to_1",
         haystack_dir="PaulGrahamEssays",
         results_version=1,
         number_of_runs_per_context_length=2,
-        context_lengths_min=5000,
-        context_lengths_max=5000,
-        context_lengths_num_intervals=1,  # Uncomment for fast testing run
-        # context_lengths_num_intervals = 5, #Uncomment for fast testing run
-        # context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
-        # context_lengths_num_intervals = 35, #Uncomment for high fidelity run
-        context_lengths=None,
+        #For spelling errors context token count can increase a lot, as error creates 2 tokens out of 1
+        target_context_length=5000, 
         document_error_percent_min=0,
         document_error_percent_max=100,
-        document_error_percent_intervals=10,  # Uncomment for fast testing run
+        document_error_percent_intervals=10,  #How many intervals to run by % of corruption 
         # document_error_percent_intervals = 10, #Nice balance between speed and fidelity
         # document_error_percent_intervals = 35, #Uncomment for high fidelity run
-        document_error_percents=None,
+        document_error_percents=None, #Not really used
+         context_lengths=None, #Not really used
         document_error_percent_interval_type="linear",
         # google_project='', #Use OS env GOOGLE_PROJECT
         # google_location='', #Use OS env GOOGLE_LOCATION
@@ -114,9 +99,6 @@ class LLMNumericScoreEvalTester:
         :param results_version: In case you would like to try the same combination of model, context length, and depth % multiple times, change the results version other than 1
         :param save_results: Whether or not you would like to save your contexts to file. Warning: These will get long! Default = True
         :param final_context_length_buffer: The amount of cushion you'd like to leave off the input context to allow for the output context. Default 200 tokens
-        :param context_lengths_min: The minimum length of the context. Default is 1000.
-        :param context_lengths_max: The maximum length of the context. Default is 200000.
-        :param context_lengths_num_intervals: The number of intervals for the context length. Default is 35.
         :param context_lengths: The lengths of the context. Default is None.
         :param document_error_percent_min: The minimum depth percent of the document. Default is 0.
         :param document_error_percent_max: The maximum depth percent of the document. Default is 100.
@@ -130,7 +112,6 @@ class LLMNumericScoreEvalTester:
         :param print_ongoing_status: Whether or not to print the ongoing status. Default is True.
         """
 
-        self.context_lengths_num_intervals = context_lengths_num_intervals
         self.document_error_percent_intervals = document_error_percent_intervals
         self.haystack_dir = haystack_dir
         self.results_version = results_version
@@ -143,9 +124,12 @@ class LLMNumericScoreEvalTester:
         self.number_of_runs_per_context_length = number_of_runs_per_context_length
         self.error_mode = error_mode
         self.eval_score_range = eval_score_range
-        # self.google_project = google_project
-        # self.google_location = google_location
 
+        self.target_context_length = target_context_length
+        context_lengths_min = target_context_length
+        context_lengths_max = target_context_length
+        context_lengths_num_intervals= 1 #Fixing this to 1 for now
+        self.context_lengths_num_intervals = 1 #Fixing this to 1 for now
         print("model_provider: " + model_provider)
         print("model_name: " + model_name)
         if context_lengths is None:
@@ -640,7 +624,7 @@ class LLMNumericScoreEvalTester:
         # List of frustration expressions
         if error_mode == "frustration":
             expression_list = self.FRUSTRATION_EXPRESSIONS
-        elif error_mode == "confusion":
+        elif error_mode == "sadness":
             expression_list = self.SADNESS_AND_SORROW_EXPRESSIONS
         else:
             raise ValueError("error_mode must be either 'frustration' or 'confusion'")
