@@ -44,7 +44,6 @@ from phoenix.trace.openai.instrumentor import OpenAIInstrumentor
 # tracer = Tracer(exporter=HttpExporter())
 # OpenAIInstrumentor(tracer).instrument()
 
-
 class LLMNumericScoreEvalTester:
     """
     This class is used to test the LLM score Evals
@@ -54,33 +53,37 @@ class LLMNumericScoreEvalTester:
         self,
         ###########################################
         ###### UNCOMMMENT only 1 Provider #########
-        # model_provider = "OpenAI",
-        # model_provider="Anthropic",
+        #model_provider = "OpenAI",
+        #model_provider="Anthropic",
         # model_provider = "Perplexity",
         # model_provider = "Anyscale",
-        # model_provider = "Mistral",
+        model_provider = "Mistral",
         # model_provider = "LiteLLM",
-        model_provider = "GoogleVertex",
+        #model_provider = "GoogleVertex",
         #############################################
         ###### UNCOMMMENT only 1 model name #########
         # model_name='gpt-4',
-        # model_name='gpt-4-1106-preview',
+        #model_name='gpt-4-1106-preview',
         # model_name='gpt-3.5-turbo-1106',
         #model_name="claude-2.1",
-        model_name='gemini-pro',
+        #model_name='gemini-pro',
         # model_name='gemini-pro-vision',
         # model_name='mistral/mistral-medium',
-        # model_name='mistral/mistral-small',
+        model_name='mistral/mistral-small',
         # model_name='mistral/mistral-tiny',
         # model_name='mistralai/Mistral-7B-Instruct-v0.1'
         # model_name='mistralai/Mixtral-8x7B-Instruct-v0.1'
         # model_name='together_ai/togethercomputer/llama-2-70b-chat',
         # model_name='huggingface/microsoft/phi-2',
         #############################################
+        ## ERROR MODE Determines the type of test, we support 3
+        #"spelling_errors" or "frustration" or "happiness
+        error_mode="spelling_errors", 
+        #range options: 1_to_10, 0_to_1, -1_to_1
+        eval_score_range="-1_to_1",
         haystack_dir="PaulGrahamEssays",
-        retrieval_question="What is the special magic {} number?",
         results_version=1,
-        number_of_runs_per_context_length=3,
+        number_of_runs_per_context_length=2,
         context_lengths_min=5000,
         context_lengths_max=5000,
         context_lengths_num_intervals=1,  # Uncomment for fast testing run
@@ -90,7 +93,7 @@ class LLMNumericScoreEvalTester:
         context_lengths=None,
         document_error_percent_min=0,
         document_error_percent_max=100,
-        document_error_percent_intervals=30,  # Uncomment for fast testing run
+        document_error_percent_intervals=10,  # Uncomment for fast testing run
         # document_error_percent_intervals = 10, #Nice balance between speed and fidelity
         # document_error_percent_intervals = 35, #Uncomment for high fidelity run
         document_error_percents=None,
@@ -98,7 +101,6 @@ class LLMNumericScoreEvalTester:
         # google_project='', #Use OS env GOOGLE_PROJECT
         # google_location='', #Use OS env GOOGLE_LOCATION
         anthropic_template_version="simple",
-        template_version="1",
         openai_api_key=None,
         anthropic_api_key=None,
         save_results=False,
@@ -108,7 +110,6 @@ class LLMNumericScoreEvalTester:
         """
 
         :param haystack_dir: The directory of text files to use as background context (or a haystack) in which the needle is to be found. Default is Paul Graham Essays.
-        :param retrieval_question: The question which with to prompt the model to do the retrieval.
         :param rnd_number_digits: The number of digits in the random number. Default is 7.
         :param results_version: In case you would like to try the same combination of model, context length, and depth % multiple times, change the results version other than 1
         :param save_results: Whether or not you would like to save your contexts to file. Warning: These will get long! Default = True
@@ -132,16 +133,16 @@ class LLMNumericScoreEvalTester:
         self.context_lengths_num_intervals = context_lengths_num_intervals
         self.document_error_percent_intervals = document_error_percent_intervals
         self.haystack_dir = haystack_dir
-        self.retrieval_question = retrieval_question
         self.results_version = results_version
         self.save_results = save_results
         self.final_context_length_buffer = final_context_length_buffer
         self.print_ongoing_status = print_ongoing_status
         self.model_provider = model_provider
         self.anthropic_template_version = anthropic_template_version
-        self.template_version = template_version
         self.testing_results = []
         self.number_of_runs_per_context_length = number_of_runs_per_context_length
+        self.error_mode = error_mode
+        self.eval_score_range = eval_score_range
         # self.google_project = google_project
         # self.google_location = google_location
 
@@ -284,11 +285,11 @@ class LLMNumericScoreEvalTester:
         async with sem:
             await self.evaluate_and_log(*args)
 
-    SIMPLE_TEMPLATE = """
+    SIMPLE_TEMPLATE_SPELLING = """
             You are a helpful AI bot that checks for grammatical, spelling and typing errors in a document context. You are going to 
-            score the document based on the percent of gramatical and typing errors. The score should be between 10 and 1.
-            A 1 score will be no grmatical errors in any word, a score of 2 will be 20% of words have errors,
-            a 5 score will be 50% errors, a score of 7 is 70%, and a 10 score will be all words in the context have a grammatical errors.
+            score the document based on the percent of gramatical and typing errors. The score should be between {templ_high} and {templ_low}.
+            A {templ_low} score will be no grmatical errors in any word, a score of {templ_20_perc} will be 20% of words have errors,
+            a {templ_50_perc} score will be 50% errors, a score of {templ_70_perc} is 70%, and a {templ_high} score will be all words in the context have a grammatical errors.
             The following is the document context.
         
             #CONTEXT
@@ -296,68 +297,95 @@ class LLMNumericScoreEvalTester:
             #ENDCONTEXT
 
             #QUESTION
-            Please return a score between 10 and 1, with the case of 10 being all words have a grammatical error and 1 being no words have a 
+            Please return a score between {templ_high} and  {templ_low}, with the case of {templ_high} being all words have a grammatical error and {templ_low} being no words have a 
             grammatical or spelling errors.
             You will return no other text or language besides the score. Only return the score. 
-            Please return in a format that is "the score is: 10" or "the score is: 1"
+            Please return in a format that is "the score is: {templ_high}" or "the score is: {templ_low}"
             """
-    SIMPLE_TEMPLATE_2 = """
-            You are a helpful AI bot that checks for grammatical, spelling and typing errors in a document context. You are going to 
-            score the document based on the percent of gramatical and typing errors. The score should be between 1 and 0.
-            A 0 score will be no grmatical errors in any word, a 0.5 score will be 50% errors and a 1 score will be all words in the 
-            context have a grammatical errors.
+
+    SIMPLE_TEMPLATE_FRUSTRATION = """
+            You are a helpful AI bot that detects frustrated conversations. You are going to 
+            score the document based on the percent of sentences where the writer expresses frustration. 
+            The score should be between {templ_high} and {templ_low}.
+            A {templ_low} score will indicate almost no frustrated sentences, a score of {templ_20_perc} will be 20% of sentences express frustration,
+            a {templ_50_perc} score will be 50% of the sentnces express frustration, a score of {templ_70_perc} is 70%, and a {templ_high} score will be all the sentences, express frustration. 
             The following is the document context.
+        
             #CONTEXT
             {context}
             #ENDCONTEXT
 
             #QUESTION
-            Please return a score between 1 and 0, with the case of 1 being all words have a grammatical error and 0 being no words have a 
-            grammatical or spelling errors.
+            Please return a score between {templ_high} and {templ_low}, with the case of {templ_high} being all sentences express frustration and {templ_low} being no sentences express frustration.
             You will return no other text or language besides the score. Only return the score. 
-            Please return in a format that is "the score is: 1" or "the score is: 0"
-            """
+            Please return in a format that is "the score is: {templ_high}" or "the score is: {templ_low}"
+    """
+
+    SIMPLE_TEMPLATE_SADNESS = """
+            You are a helpful AI bot that detects sadness and sorrow in writing. You are going to 
+            score the document based on the percent of sentences where the writer expresses sadness or sorrow. 
+            The score should be between {templ_high} and {templ_low}.
+            A {templ_low} score will indicate almost no sentences that have sadness or sorrow, a score of {templ_20_perc} will be 20% of sentences express sadness or sorrow,
+            a {templ_50_perc} score will be 50% of the sentnces express sadness or sorrow, 
+            a score of {templ_70_perc} is 70% have sadness or sorrow, and a {templ_high} score will be all the sentences, express sadness or sorrow. 
+            The following is the document context.
+        
+            #CONTEXT
+            {context}
+            #ENDCONTEXT
+
+            #QUESTION
+            Please return a score between {templ_high} and {templ_low}, with the case of {templ_high} being all sentences express sadness and sorrow and {templ_low} being no sentences express sadness or sorrow.
+            You will return no other text or language besides the score. Only return the score. 
+            Please return in a format that is "the score is: {templ_high}" or "the score is: {templ_low}"
+    """
 
     def run_test(self):
         # Run through each iteration of context_lengths and depths
         contexts = []
+        if self.error_mode == "spelling_errors":
+            simple_template = self.SIMPLE_TEMPLATE_SPELLING
+        elif self.error_mode == "frustration":
+            simple_template = self.SIMPLE_TEMPLATE_FRUSTRATION
+        elif self.error_mode == "sadness":
+            simple_template = self.SIMPLE_TEMPLATE_SADNESS
+        else:
+            raise ValueError("template_version must be a valid template name")
+        
+        if self.eval_score_range == "1_to_10":
+            #10 is 100%, 7 is 70%, 5 is 50%, 2  is 20%, 1 is 0%
+            simple_template = simple_template.format(templ_high=str(10), templ_low=str(1), templ_20_perc=str(2), 
+                                                                    templ_50_perc=str(5), templ_70_perc=str(7),
+                                                                    context="{context}")
+        elif self.eval_score_range == "0_to_1":
+            #1 is 100%, 0.7 is 70%, 0.5 is 50%, 0.2  is 20%, 0.1 is 0%
+            simple_template = simple_template.format(templ_high=str(1), templ_low=str(0), templ_20_perc=str(0.2), 
+                                                                    templ_50_perc=str(0.5), templ_70_perc=str(0.7),
+                                                                    context="{context}")     
+        elif self.eval_score_range == "-1_to_1":
+            #1 is 100%, 0.4 is 70%, 0 is 50%, -0.4  is 20%, -1 is 0%
+            simple_template = simple_template.format(templ_high=str(1), templ_low=str(-1), templ_20_perc=str(-0.4), 
+                                                                    templ_50_perc=str(0), templ_70_perc=str(0.4),
+                                                                    context="{context}")
         # Evaluation of the model performance
         # Uses Phoenix Evals
         if self.model_provider == "OpenAI":
             model = OpenAIModel(model_name="gpt-4-1106-preview")
-            if self.template_version == "1":
-                template = self.SIMPLE_TEMPLATE
-            else:
-                template = self.SIMPLE_TEMPLATE_2
+            template = simple_template
         elif self.model_provider == "Anthropic":
             model = AnthropicModel(model="claude-2.1", temperature=0.0)
             # model = LiteLLMModel(model_name="claude-2.1", temperature=0.0)
-            if self.anthropic_template_version == "original":
-                template = self.ANTHROPIC_TEMPLATE_ORIGINAL
-            elif self.anthropic_template_version == "rev1":
-                template = self.ANTHROPIC_TEMPLATE_REV1
-            elif self.anthropic_template_version == "simple":
-                if self.template_version == "1":
-                    template = self.SIMPLE_TEMPLATE
-                else:
-                    template = self.SIMPLE_TEMPLATE_2
-            else:
-                template = self.ANTHROPIC_TEMPLATE_REV2
+            template = simple_template
+ 
         elif self.model_provider == "LiteLLM":
             model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
-            if self.template_version == "1":
-                template = self.SIMPLE_TEMPLATE
-            else:
-                template = self.SIMPLE_TEMPLATE_2
+            template = simple_template
             litellm.set_verbose = True
             litellm.vertex_project = self.google_project
             litellm.vertex_location = self.google_location
 
         elif self.model_provider == "GoogleVertex":
-            if self.template_version == "1":
-                template = self.SIMPLE_TEMPLATE
-            else:
-                template = self.SIMPLE_TEMPLATE_2
+            template = simple_template
             aiplatform.init(
                 # your Google Cloud Project ID or number
                 # environment default used is not set
@@ -370,10 +398,7 @@ class LLMNumericScoreEvalTester:
         else:
             model = LiteLLMModel(model_name=self.model_name, temperature=0.0)
             # litellm.set_verbose=True
-            if self.template_version == "1":
-                template = self.SIMPLE_TEMPLATE
-            else:
-                template = self.SIMPLE_TEMPLATE_2
+            template = simple_template
 
         full_context = self.read_context_files()
         for context_length in self.context_lengths:
@@ -384,7 +409,7 @@ class LLMNumericScoreEvalTester:
                     print("error_percent : " + str(error_percent))
                     print("run_number : " + str(run_number))
                     results = self.create_contexts(
-                        trim_context, context_length, error_percent, run_number
+                        trim_context, context_length, error_percent, self.error_mode, run_number
                     )
                     contexts.append(results)
         df = pd.DataFrame(contexts)
@@ -398,7 +423,7 @@ class LLMNumericScoreEvalTester:
             # needle = row['needle_rnd_number']
             # The rails is used to search outputs for specific values and returns needle, unsanswerable, or unparsable
             # railed_output = snap_to_rail(output, [needle, "UNANSWERABLE"])
-            print("The error percent is: " + str(row["error_corruption_percentage"]))
+            print("The error percent is: " + str(row["corruption_percentage"]))
             print(f"🔍 The model output is: {output}")
             score = self.find_score(output)
             print(f"🔍 The score is: {score}")
@@ -433,8 +458,10 @@ class LLMNumericScoreEvalTester:
             include_response=True,
         )
         run_name = (
-            "template_ver_"
-            + self.template_version
+            "templ_"
+            + self.error_mode
+            + "_"
+            + self.eval_score_range
             + "_"
             + self.model_provider
             + "_"
@@ -448,8 +475,9 @@ class LLMNumericScoreEvalTester:
         self.plot_point_distribution(
             df,
             "score",
-            "error_corruption_percentage",
+            "corruption_percentage",
             run_name,
+            self.error_mode,
             jitter_magnitude=0.05,
             circle_size=250,
         )
@@ -475,20 +503,20 @@ class LLMNumericScoreEvalTester:
             # needle is not inserted so check for unanswerable
             return 1 if row["label"] == "unanswerable" else 10
 
-    def create_contexts(self, trim_context, context_length, error_percent, run_number):
+    def create_contexts(self, trim_context, context_length, error_percent, error_mode, run_number):
         # Checks to see if you've already checked a length/percent/version.
         # This helps if the program stop running and you want to restart later
         if self.save_results:
             if self.result_exists(context_length, error_percent):
                 return
         # Go generate the required length context and place your needle statement in
-        context = self.generate_context(trim_context, error_percent)
+        context = self.generate_context(trim_context, error_percent, error_mode)
         results = {
             "context": context,  # Uncomment this line if you'd like to save the context the model was asked to retrieve from. Warning: This will become very large.
             "model": self.model_to_test_description,
             "context_length_limit": int(context_length),
             "context_length": len(self.get_tokens_from_context(context)),
-            "error_corruption_percentage": str(error_percent),
+            "corruption_percentage": str(error_percent),
             "version": self.results_version,
             "run_number": run_number,
         }
@@ -520,9 +548,12 @@ class LLMNumericScoreEvalTester:
                         return True
         return False
 
-    def generate_context(self, trim_context, error_percent):
-        # Insert your random statement according to your depth percent
-        context = self.insert_errors_in_paragraph(trim_context, error_percent)
+    def generate_context(self, trim_context, error_percent, error_mode):
+        if error_mode == "spelling_errors":
+            # Insert your random statement according to your depth percent
+            context = self.insert_errors_in_paragraph(trim_context, error_percent)
+        else:
+            context = self.insert_sentiment(trim_context, error_percent, error_mode)
 
         return context
 
@@ -605,6 +636,40 @@ class LLMNumericScoreEvalTester:
         else:
             return None
 
+    def insert_sentiment(self, paragraph, frustration_percent, error_mode):
+        # List of frustration expressions
+        if error_mode == "frustration":
+            expression_list = self.FRUSTRATION_EXPRESSIONS
+        elif error_mode == "confusion":
+            expression_list = self.SADNESS_AND_SORROW_EXPRESSIONS
+        else:
+            raise ValueError("error_mode must be either 'frustration' or 'confusion'")
+
+        # Function to split the paragraph into sentences
+        def split_into_sentences(text):
+            sentences = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s', text)
+            return sentences
+
+        # Split the paragraph into sentences
+        sentences = split_into_sentences(paragraph)
+        modified_sentences = []
+
+        for sentence in sentences:
+            if random.uniform(0, 100) <= frustration_percent:
+                expression = random.choice(expression_list)
+                if random.choice([True, False]):
+                    # Append frustration expression at the end
+                    sentence = f"{sentence} {expression}"
+                else:
+                    # Append frustration expression at the beginning
+                    sentence = f"{expression} {sentence}"
+            modified_sentences.append(sentence)
+
+        # Combine the modified sentences back into a paragraph
+        modified_paragraph = ' '.join(modified_sentences)
+        return modified_paragraph
+
+
     def get_context_length_in_tokens(self, context):
         if (self.model_provider == "OpenAI") or (self.model_provider == "Perplexity"):
             return len(self.enc.encode(context))
@@ -657,6 +722,7 @@ class LLMNumericScoreEvalTester:
         x_column,
         y_column,
         run_name,
+        error_mode,
         jitter_magnitude=0.15,
         circle_size=225,
     ):
@@ -748,8 +814,8 @@ class LLMNumericScoreEvalTester:
             label="Data Points",
         )
         plt.legend(handles=[red_patch[0], orange_patch[0]])
-        ax.set_title(f"Distribution of {x_column} by {y_column}", fontdict={"size": 22})
-        ax.set_xlabel(f"{x_column}", alpha=0.7)
+        ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data" , fontdict={"size": 22})
+        ax.set_xlabel(f"LLM Eval {x_column}", alpha=0.7)
         ax.set_xlim(x_min, x_max)  # Adjust x-axis limit based on data
         plt.xticks(alpha=0.7)
         plt.gca().spines["top"].set_visible(False)
@@ -761,11 +827,118 @@ class LLMNumericScoreEvalTester:
         # File path for saving the plot as a PNG file
         output_png_path = run_name + "_graph.png"
         plt.savefig(output_png_path, bbox_inches="tight")
-
+        
         plt.show()
 
-    def get_results(self):
-        return self.testing_results
+    FRUSTRATION_EXPRESSIONS = [
+        "Ugh",
+        "Why did you do that",
+        "Who do you think you are",
+        "That is lame",
+        "Seriously",
+        "This is ridiculous",
+        "Can you not",
+        "What the heck",
+        "I can't even",
+        "Oh, come on",
+        "Not this again",
+        "This is driving me crazy",
+        "Are you kidding me",
+        "I've had it",
+        "This is absurd",
+        "What a pain",
+        "I'm so done with this",
+        "Why me",
+        "This is the last thing I need",
+        "This is nonsense",
+        "I'm losing my patience",
+        "Not now",
+        "Great, just great",
+        "I don’t believe this",
+        "This is so annoying",
+        "Can't anything go right",
+        "This is hopeless",
+        "I'm fed up",
+        "Enough already",
+        "This is the worst",
+        "I can't believe this",
+        "What a mess",
+        "This is a disaster",
+        "Not again",
+        "This is unbearable",
+        "Why is this happening",
+        "I'm so over this",
+        "This is a joke, right",
+        "I'm at my wit's end",
+        "You've got to be kidding me",
+        "This makes no sense",
+        "I'm beyond frustrated",
+        "This is infuriating",
+        "I've had enough",
+        "What a nightmare",
+        "This is unacceptable",
+        "I can't take this anymore",
+        "This is a total headache",
+        "Why is everything so complicated",
+        "I'm so irritated right now"
+    ]
+
+
+    SADNESS_AND_SORROW_EXPRESSIONS = [
+        "I'm heartbroken",
+        "This is so sad",
+        "I feel so down",
+        "I'm in tears",
+        "This is heartbreaking",
+        "I'm grieving",
+        "I feel so empty",
+        "This is so disheartening",
+        "I'm in despair",
+        "I'm feeling blue",
+        "This is so depressing",
+        "I'm mourning",
+        "I'm so melancholy",
+        "This is so tragic",
+        "I'm in sorrow",
+        "I feel so low",
+        "This is so gloomy",
+        "I'm weeping",
+        "I feel so desolate",
+        "This is so mournful",
+        "I'm in anguish",
+        "I feel so hopeless",
+        "This is so dismal",
+        "I'm in distress",
+        "I feel so forlorn",
+        "This is so sorrowful",
+        "I'm in pain",
+        "I feel so dejected",
+        "This is so lugubrious",
+        "I'm in agony",
+        "I feel so bereaved",
+        "This is so doleful",
+        "I'm suffering",
+        "I feel so crushed",
+        "This is so bleak",
+        "I'm in torment",
+        "I feel so woeful",
+        "This is so heavy-hearted",
+        "I'm in a funk",
+        "I feel so somber",
+        "This is so dolorous",
+        "I'm lamenting",
+        "I feel so wretched",
+        "This is so cheerless",
+        "I'm despondent",
+        "I feel so pained",
+        "This is so crestfallen",
+        "I'm in a state of despair",
+        "I feel so gutted",
+        "This is so melancholic"
+    ]
+
+
+
 
     def print_start_test_summary(self):
         print("\n")
