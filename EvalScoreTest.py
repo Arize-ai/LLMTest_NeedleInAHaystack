@@ -25,7 +25,7 @@ import joypy
 import matplotlib.cm as cm
 from google.cloud import aiplatform
 import vertexai.preview
-
+import matplotlib.pyplot as plt
 import random
 import string
 
@@ -40,25 +40,26 @@ class LLMNumericScoreEvalTester:
 
     def __init__(
         self,
+        haystack_dir="PaulGrahamEssays",
         ###########################################
         ###### UNCOMMMENT only 1 Provider #########
-        #model_provider = "OpenAI",
+        model_provider = "OpenAI",
         #model_provider="Anthropic",
         # model_provider = "Perplexity",
         # model_provider = "Anyscale",
-        model_provider = "Mistral",
+        #model_provider = "Mistral",
         # model_provider = "LiteLLM",
         #model_provider = "GoogleVertex",
         #############################################
         ###### UNCOMMMENT only 1 model name #########
         # model_name='gpt-4',
-        #model_name='gpt-4-1106-preview',
+        model_name='gpt-4-1106-preview',
         # model_name='gpt-3.5-turbo-1106',
         #model_name="claude-2.1",
         #model_name='gemini-pro',
         # model_name='gemini-pro-vision',
         # model_name='mistral/mistral-medium',
-        model_name='mistral/mistral-small',
+        #model_name='mistral/mistral-small',
         # model_name='mistral/mistral-tiny',
         # model_name='mistralai/Mistral-7B-Instruct-v0.1'
         # model_name='mistralai/Mixtral-8x7B-Instruct-v0.1'
@@ -67,12 +68,10 @@ class LLMNumericScoreEvalTester:
         #############################################
         ## ERROR MODE Determines the type of test, we support 3
         #"spelling_errors" or "frustration" or "sadness
-        error_mode="frustration", 
+        error_mode="sadness", 
         #range options: 1_to_10, 0_to_1, -1_to_1
-        eval_score_range="-1_to_1",
-        haystack_dir="PaulGrahamEssays",
-        results_version=1,
-        number_of_runs_per_context_length=2,
+        eval_score_range="1_to_10",
+        number_of_runs_per_context_length=5,
         #For spelling errors context token count can increase a lot, as error creates 2 tokens out of 1
         target_context_length=5000, 
         document_error_percent_min=0,
@@ -91,6 +90,7 @@ class LLMNumericScoreEvalTester:
         save_results=False,
         final_context_length_buffer=200,
         print_ongoing_status=True,
+        results_version=1,
     ):
         """
 
@@ -428,7 +428,7 @@ class LLMNumericScoreEvalTester:
         # The rails are used to search for specific values in the output
         # The output is then classified as either needle_rnd_number, unanswerable, or unparsable
         # This runs a number of threads in parallel speeding up the generation/Evaluation process
-        nest_asyncio.apply()  # Run async
+        #nest_asyncio.apply()  # Run async
         test_results = llm_generate(
             dataframe=df,
             template=template,
@@ -464,9 +464,25 @@ class LLMNumericScoreEvalTester:
             self.error_mode,
             jitter_magnitude=0.05,
             circle_size=250,
+            swap_axes=True,
+            show_only_medians=True,
         )
-        # joypy.joyplot(df,by="dp_string", column="label", overlap=0.1, fill=False, colormap=cm.OrRd_r)
+        jitter_magnitude = 0.15
+        df['score_jitter'] = df['score'] + np.random.uniform(
+            -jitter_magnitude, jitter_magnitude, size=len(df))       
+        df['dp_string'] = df['corruption_percentage'].astype(str) 
+        df_sorted = df.sort_values(by='corruption_percentage')
+        #fig, axes = joypy.joyplot(df_sorted,by="dp_string", column="score_jitter", overlap=0.1,  
+        #              figsize=(6,5), colormap=cm.OrRd_r, linecolor="grey", linewidth=1)
+        fig, axes = joypy.joyplot(df_sorted,by="dp_string", column="score_jitter", overlap=0.1,  
+                      colormap=cm.Blues_r, linecolor="grey", linewidth=1,ylim="own")
+        
         # df['score'] = df.apply(lambda row: self.check_row(row), axis=1)
+        # Save the figure
+        plt.savefig(run_name + '_joyplot.png', dpi=300)  # You can change the file name and DPI as needed
+
+        # Show the plot
+        plt.show()
         df.to_csv("save_results_" + run_name + "_.csv")
 
         return contexts
@@ -641,12 +657,18 @@ class LLMNumericScoreEvalTester:
         for sentence in sentences:
             if random.uniform(0, 100) <= frustration_percent:
                 expression = random.choice(expression_list)
-                if random.choice([True, False]):
-                    # Append frustration expression at the end
-                    sentence = f"{sentence} {expression}"
+                add_at_end = random.choice([True, False])
+
+                if sentence.endswith('.'):
+                    sentence = sentence[:-1]  # Remove the period
+
+                if add_at_end:
+                    # Append sentiment expression at the end
+                    sentence = f"{sentence}, {expression}."
                 else:
-                    # Append frustration expression at the beginning
-                    sentence = f"{expression} {sentence}"
+                    # Append sentiment expression at the beginning
+                    sentence = f"{expression}, {sentence}."
+
             modified_sentences.append(sentence)
 
         # Combine the modified sentences back into a paragraph
@@ -700,119 +722,138 @@ class LLMNumericScoreEvalTester:
             context = self.decode_tokens(tokens, context_length)
         return context
 
+
     def plot_point_distribution(
-        self,
-        dataframe,
-        x_column,
-        y_column,
-        run_name,
-        error_mode,
-        jitter_magnitude=0.15,
-        circle_size=225,
-    ):
-        """
-        Plots a scatter plot of the distribution of x_column values by y_column categories and saves it as a PNG file.
+            self,
+            dataframe,
+            x_column,
+            y_column,
+            run_name,
+            error_mode,
+            jitter_magnitude=0.15,
+            circle_size=225,
+            swap_axes=False,
+            show_only_medians=False
+        ):
+            dataframe[y_column] = pd.to_numeric(dataframe[y_column], errors="coerce")
+            clean_df = dataframe.dropna(subset=[x_column, y_column])
+            clean_df = clean_df.sort_values(by=y_column, ascending=True)
+            df_median = clean_df[[x_column, y_column]].groupby(y_column).median()
 
-        Args:
-        dataframe (pd.DataFrame): The DataFrame containing the data.
-        x_column (str): The name of the column for x-axis values.
-        y_column (str): The name of the column for y-axis categories.
-        run_name (str): The base name for the output file.
-        jitter_magnitude (float): The magnitude of the jitter to apply to the x-axis values. Default is 0.15.
-        circle_size (int): The size of the circles in the scatter plot. Default is 225.
-        """
-        # Convert y_column to numeric if it's not already
-        dataframe[y_column] = pd.to_numeric(dataframe[y_column], errors="coerce")
+            x_min = clean_df[x_column].min() - 1
+            x_max = clean_df[x_column].max() + 1
 
-        # Drop rows where x_column or y_column is NaN
-        clean_df = dataframe.dropna(subset=[x_column, y_column])
+            fig, ax = plt.subplots(figsize=(16, 10), dpi=80)
 
-        # Sort DataFrame based on y_column
-        clean_df = clean_df.sort_values(by=y_column, ascending=False)
+            for i, (idx, row) in enumerate(df_median.iterrows()):
+                if not show_only_medians:
+                    df_category = clean_df[clean_df[y_column] == idx]
+                    jittered_values = df_category[x_column] + np.random.uniform(
+                        -jitter_magnitude, jitter_magnitude, size=len(df_category)
+                    )
+                    if swap_axes:
+                        ax.scatter(
+                            y=jittered_values,
+                            x=np.repeat(i, df_category.shape[0]),
+                            s=circle_size,
+                            edgecolors="gray",
+                            color=(1, 0.5, 0, 0.5),
+                            alpha=0.3,
+                        )
+                    else:
+                        ax.scatter(
+                            x=jittered_values,
+                            y=np.repeat(i, df_category.shape[0]),
+                            s=circle_size,
+                            edgecolors="gray",
+                            color=(1, 0.5, 0, 0.5),
+                            alpha=0.3,
+                        )
 
-        # Mean and Median calculations
-        df_mean = clean_df[[x_column, y_column]].groupby(y_column).mean()
-        df_median = clean_df[[x_column, y_column]].groupby(y_column).median()
+                if swap_axes:
+                    ax.scatter(
+                        y=df_median.loc[idx, x_column], x=i, s=circle_size, c="firebrick"
+                    )
+                else:
+                    ax.scatter(
+                        x=df_median.loc[idx, x_column], y=i, s=circle_size, c="firebrick"
+                    )
 
-        # Determine x-axis limits
-        x_min = clean_df[x_column].min() - 1
-        x_max = clean_df[x_column].max() + 1
+            if swap_axes:
+                ax.set_ylabel(f"LLM Eval {x_column}", alpha=0.7)
+                ax.set_xlabel(f"LLM Eval {y_column}", alpha=0.7)
+                ax.set_ylim(x_min, x_max)
+                ax.set_xlim(-1, len(df_median))
+                ax.set_xticks(range(len(df_median)))
+                ax.set_xticklabels(
+                    [f"{idx:.1f}" for idx in df_median.index],
+                    fontdict={"horizontalalignment": "right"},
+                    alpha=0.7,
+                )
+            else:
+                ax.set_xlabel(f"LLM Eval {x_column}", alpha=0.7)
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylabel(f"LLM Eval {y_column}", alpha=0.7)
+                ax.set_yticks(range(len(df_median)))
+                ax.set_yticklabels(
+                    [f"{idx:.1f}" for idx in df_median.index],
+                    fontdict={"horizontalalignment": "right"},
+                    alpha=0.7,
+                )
 
-        # Draw horizontal lines and dots
-        fig, ax = plt.subplots(figsize=(16, 10), dpi=80)
-
-        for i, (idx, row) in enumerate(df_mean.iterrows()):
-            df_category = clean_df[clean_df[y_column] == idx]
-            # Apply jitter with specified magnitude
-            jittered_x = df_category[x_column] + np.random.uniform(
-                -jitter_magnitude, jitter_magnitude, size=len(df_category)
+            red_patch = plt.plot(
+                [],
+                [],
+                marker="o",
+                ms=10,
+                ls="",
+                mec=None,
+                color="firebrick",
+                label="Median",
             )
-            ax.scatter(
-                y=np.repeat(i, df_category.shape[0]),
-                x=jittered_x,
-                s=circle_size,
-                edgecolors="gray",
-                color=(1, 0.5, 0, 0.5),
-                alpha=0.5,
+            if not show_only_medians:
+                orange_patch = plt.plot(
+                    [],
+                    [],
+                    marker="o",
+                    ms=10,
+                    ls="",
+                    mec=None,
+                    color=(1, 0.5, 0, 0.5),
+                    label="Data Points",
+                )
+                plt.legend(handles=[red_patch[0], orange_patch[0]])
+            else:
+                plt.legend(handles=[red_patch[0]])
+
+            ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data", fontdict={"size": 22})
+
+            plt.xticks(alpha=0.7)
+            plt.gca().spines["top"].set_visible(False)
+            plt.gca().spines["bottom"].set_visible(False)
+            plt.gca().spines["right"].set_visible(False)
+            plt.gca().spines["left"].set_visible(False)
+            plt.grid(axis="both", alpha=0.4, linewidth=0.1)
+
+            # Annotation should be outside the loop
+            annotation_x = x_max * 0.8 if not swap_axes else len(df_median) / 2
+            annotation_y = len(df_median) / 2 if not swap_axes else x_min - 2
+            ax.text(
+                annotation_x,
+                annotation_y,
+                "$red \; dots \; are \; the \: median$",
+                fontdict={"size": 12},
+                color="firebrick",
             )
-            ax.scatter(
-                y=i, x=df_median.loc[idx, x_column], s=circle_size, c="firebrick"
-            )
 
-        # Annotate
-        ax.text(
-            x_max * 0.8,
-            len(df_mean) / 2,
-            "$red \; dots \; are \; the \: median$",
-            fontdict={"size": 12},
-            color="firebrick",
-        )
+            # File path for saving the plot as a PNG file
+            output_png_path = run_name + "_graph.png"
+            plt.savefig(output_png_path, bbox_inches="tight")
 
-        # Set y-ticks to correspond to the group names (in reverse order)
-        ax.set_yticks(range(len(df_mean)))
-        ax.set_yticklabels(
-            [f"{idx:.1f}" for idx in df_mean.index],
-            fontdict={"horizontalalignment": "right"},
-            alpha=0.7,
-        )
+            plt.show()
 
-        # Decorations
-        red_patch = plt.plot(
-            [],
-            [],
-            marker="o",
-            ms=10,
-            ls="",
-            mec=None,
-            color="firebrick",
-            label="Median",
-        )
-        orange_patch = plt.plot(
-            [],
-            [],
-            marker="o",
-            ms=10,
-            ls="",
-            mec=None,
-            color=(1, 0.5, 0, 0.5),
-            label="Data Points",
-        )
-        plt.legend(handles=[red_patch[0], orange_patch[0]])
-        ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data" , fontdict={"size": 22})
-        ax.set_xlabel(f"LLM Eval {x_column}", alpha=0.7)
-        ax.set_xlim(x_min, x_max)  # Adjust x-axis limit based on data
-        plt.xticks(alpha=0.7)
-        plt.gca().spines["top"].set_visible(False)
-        plt.gca().spines["bottom"].set_visible(False)
-        plt.gca().spines["right"].set_visible(False)
-        plt.gca().spines["left"].set_visible(False)
-        plt.grid(axis="both", alpha=0.4, linewidth=0.1)
 
-        # File path for saving the plot as a PNG file
-        output_png_path = run_name + "_graph.png"
-        plt.savefig(output_png_path, bbox_inches="tight")
-        
-        plt.show()
+
 
     FRUSTRATION_EXPRESSIONS = [
         "Ugh",
@@ -934,7 +975,10 @@ class LLMNumericScoreEvalTester:
         print(
             f"- Document Depths: {len(self.document_error_percents)}, Min: {min(self.document_error_percents)}%, Max: {max(self.document_error_percents)}%"
         )
-
+        print("Error Mode " + self.error_mode)
+        print("Eval Score Range " + self.eval_score_range)
+        print("Model Provider " + self.model_provider)
+        print("Number of statistical runs per range " + str(self.number_of_runs_per_context_length))
         print("\n\n")
 
     def start_test(self):
