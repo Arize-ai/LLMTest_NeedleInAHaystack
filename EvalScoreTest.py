@@ -434,7 +434,7 @@ class LLMNumericScoreEvalTester:
             template=template,
             model=model,
             verbose=True,
-            concurrency=1,
+            concurrency=15,
             # Callback function that will be called for each row of the dataframe
             output_parser=numeric_score_eval,
             # These two flags will add the prompt / response to the returned dataframe
@@ -456,33 +456,32 @@ class LLMNumericScoreEvalTester:
             + str(self.document_error_percent_intervals)
         ).replace("/", "_")
         df = pd.concat([df, test_results], axis=1)
-        self.plot_point_distribution(
-            df,
-            "score",
-            "corruption_percentage",
-            run_name,
-            self.error_mode,
-            jitter_magnitude=0.05,
-            circle_size=250,
-            swap_axes=True,
-            show_only_medians=True,
-        )
         jitter_magnitude = 0.15
         df['score_jitter'] = df['score'] + np.random.uniform(
             -jitter_magnitude, jitter_magnitude, size=len(df))       
         df['dp_string'] = df['corruption_percentage'].astype(str) 
-        df_sorted = df.sort_values(by='corruption_percentage')
-        #fig, axes = joypy.joyplot(df_sorted,by="dp_string", column="score_jitter", overlap=0.1,  
-        #              figsize=(6,5), colormap=cm.OrRd_r, linecolor="grey", linewidth=1)
+        self.plot_point_distribution(
+            df,
+            "score_jitter",
+            "corruption_percentage",
+            run_name,
+            self.error_mode,
+            jitter_magnitude=0.1,
+            circle_size=250,
+            swap_axes=True,
+            show_only_medians=False,
+            error_bars=False
+        )
+
+        df_sorted = df.sort_values(by='corruption_percentage', ascending=False)
         fig, axes = joypy.joyplot(df_sorted,by="dp_string", column="score_jitter", overlap=0.1,  
                       colormap=cm.Blues_r, linecolor="grey", linewidth=1,ylim="own")
         
-        # df['score'] = df.apply(lambda row: self.check_row(row), axis=1)
         # Save the figure
         plt.savefig(run_name + '_joyplot.png', dpi=300)  # You can change the file name and DPI as needed
 
         # Show the plot
-        plt.show()
+        #plt.show()
         df.to_csv("save_results_" + run_name + "_.csv")
 
         return contexts
@@ -723,6 +722,27 @@ class LLMNumericScoreEvalTester:
         return context
 
 
+    def calculate_errors(self, dataframe, group_column, value_column):
+        grouped = dataframe.groupby(group_column)
+        group_sizes = grouped.size()
+        medians = grouped[value_column].median()
+        lower_quartiles = grouped[value_column].quantile(0.25)
+        upper_quartiles = grouped[value_column].quantile(0.75)
+
+        #print("Group sizes:\n", group_sizes)
+        #print("Lower quartiles:\n", lower_quartiles)
+        #print("Medians:\n", medians)
+        #print("Upper quartiles:\n", upper_quartiles)
+
+        lower_errors = medians - lower_quartiles
+        upper_errors = upper_quartiles - medians
+
+        # Ensuring that no error value is less than 0.1
+        lower_errors = np.maximum(lower_errors, 0.2)
+        upper_errors = np.maximum(upper_errors, 0.2)
+
+        return lower_errors , upper_errors,
+
     def plot_point_distribution(
             self,
             dataframe,
@@ -733,7 +753,8 @@ class LLMNumericScoreEvalTester:
             jitter_magnitude=0.15,
             circle_size=225,
             swap_axes=False,
-            show_only_medians=False
+            show_only_medians=False,
+            error_bars=False
         ):
             dataframe[y_column] = pd.to_numeric(dataframe[y_column], errors="coerce")
             clean_df = dataframe.dropna(subset=[x_column, y_column])
@@ -743,14 +764,32 @@ class LLMNumericScoreEvalTester:
             x_min = clean_df[x_column].min() - 1
             x_max = clean_df[x_column].max() + 1
 
+            lower_errors, upper_errors = self.calculate_errors(clean_df, y_column, x_column)
+
             fig, ax = plt.subplots(figsize=(16, 10), dpi=80)
 
             for i, (idx, row) in enumerate(df_median.iterrows()):
+                if error_bars:
+                        if swap_axes:
+                            ax.errorbar(
+                                y=df_median.loc[idx, x_column], x=i,
+                                yerr=[[lower_errors[idx]], [upper_errors[idx]]],  # Vertical error
+                                fmt='o', color='firebrick',
+                                capsize=5  # Set a visible cap size
+                            )
+                        else:
+                            ax.errorbar(
+                                x=df_median.loc[idx, x_column], y=i,
+                                xerr=[[lower_errors[idx]], [upper_errors[idx]]],  # Horizontal error
+                                fmt='o', color='firebrick',
+                                capsize=5  # Set a visible cap size
+                        )
                 if not show_only_medians:
                     df_category = clean_df[clean_df[y_column] == idx]
                     jittered_values = df_category[x_column] + np.random.uniform(
                         -jitter_magnitude, jitter_magnitude, size=len(df_category)
                     )
+
                     if swap_axes:
                         ax.scatter(
                             y=jittered_values,
@@ -822,9 +861,9 @@ class LLMNumericScoreEvalTester:
                     color=(1, 0.5, 0, 0.5),
                     label="Data Points",
                 )
-                plt.legend(handles=[red_patch[0], orange_patch[0]])
+                plt.legend(handles=[red_patch[0], orange_patch[0]], loc="lower right")
             else:
-                plt.legend(handles=[red_patch[0]])
+                plt.legend(handles=[red_patch[0]], loc="lower right")
 
             ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data", fontdict={"size": 22})
 
@@ -834,17 +873,6 @@ class LLMNumericScoreEvalTester:
             plt.gca().spines["right"].set_visible(False)
             plt.gca().spines["left"].set_visible(False)
             plt.grid(axis="both", alpha=0.4, linewidth=0.1)
-
-            # Annotation should be outside the loop
-            annotation_x = x_max * 0.8 if not swap_axes else len(df_median) / 2
-            annotation_y = len(df_median) / 2 if not swap_axes else x_min - 2
-            ax.text(
-                annotation_x,
-                annotation_y,
-                "$red \; dots \; are \; the \: median$",
-                fontdict={"size": 12},
-                color="firebrick",
-            )
 
             # File path for saving the plot as a PNG file
             output_png_path = run_name + "_graph.png"
