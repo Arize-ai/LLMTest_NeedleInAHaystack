@@ -43,20 +43,20 @@ class LLMNumericScoreEvalTester:
         haystack_dir="PaulGrahamEssays",
         ###########################################
         ###### UNCOMMMENT only 1 Provider #########
-        model_provider = "OpenAI",
+        #model_provider = "OpenAI",
         #model_provider="Anthropic",
         # model_provider = "Perplexity",
         # model_provider = "Anyscale",
         #model_provider = "Mistral",
         # model_provider = "LiteLLM",
-        #model_provider = "GoogleVertex",
+        model_provider = "GoogleVertex",
         #############################################
         ###### UNCOMMMENT only 1 model name #########
         # model_name='gpt-4',
-        model_name='gpt-4-1106-preview',
-        # model_name='gpt-3.5-turbo-1106',
+        #model_name='gpt-4-1106-preview',
+        #model_name='gpt-3.5-turbo-1106',
         #model_name="claude-2.1",
-        #model_name='gemini-pro',
+        model_name='gemini-pro',
         # model_name='gemini-pro-vision',
         # model_name='mistral/mistral-medium',
         #model_name='mistral/mistral-small',
@@ -67,10 +67,10 @@ class LLMNumericScoreEvalTester:
         # model_name='huggingface/microsoft/phi-2',
         #############################################
         ## ERROR MODE Determines the type of test, we support 3
-        #"spelling_errors" or "frustration" or "sadness
-        error_mode="sadness", 
+        #"spelling_errors" or "sadness or "frustration" 
+        error_mode="spelling_errors", 
         #range options: 1_to_10, 0_to_1, -1_to_1
-        eval_score_range="1_to_10",
+        eval_score_range="0_to_1",
         number_of_runs_per_context_length=5,
         #For spelling errors context token count can increase a lot, as error creates 2 tokens out of 1
         target_context_length=5000, 
@@ -271,7 +271,7 @@ class LLMNumericScoreEvalTester:
 
     SIMPLE_TEMPLATE_SPELLING = """
             You are a helpful AI bot that checks for grammatical, spelling and typing errors in a document context. You are going to 
-            score the document based on the percent of gramatical and typing errors. The score should be between {templ_high} and {templ_low}.
+            score the document based on the percent of grammatical and typing errors. The score should be between {templ_high} and {templ_low}.
             A {templ_low} score will be no grmatical errors in any word, a score of {templ_20_perc} will be 20% of words have errors,
             a {templ_50_perc} score will be 50% errors, a score of {templ_70_perc} is 70%, and a {templ_high} score will be all words in the context have a grammatical errors.
             The following is the document context.
@@ -466,11 +466,12 @@ class LLMNumericScoreEvalTester:
             "corruption_percentage",
             run_name,
             self.error_mode,
-            jitter_magnitude=0.1,
             circle_size=250,
             swap_axes=True,
-            show_only_medians=False,
-            error_bars=False
+            show_only_medians=True,
+            error_bars=False,
+            model_name=self.model_name,
+            eval_score_range = self.eval_score_range
         )
 
         df_sorted = df.sort_values(by='corruption_percentage', ascending=False)
@@ -750,11 +751,12 @@ class LLMNumericScoreEvalTester:
             y_column,
             run_name,
             error_mode,
-            jitter_magnitude=0.15,
             circle_size=225,
             swap_axes=False,
             show_only_medians=False,
-            error_bars=False
+            error_bars=False,
+            model_name="",
+            eval_score_range = "1_to_10",
         ):
             dataframe[y_column] = pd.to_numeric(dataframe[y_column], errors="coerce")
             clean_df = dataframe.dropna(subset=[x_column, y_column])
@@ -763,6 +765,14 @@ class LLMNumericScoreEvalTester:
 
             x_min = clean_df[x_column].min() - 1
             x_max = clean_df[x_column].max() + 1
+            if eval_score_range == "1_to_10":
+                x_max = np.maximum(x_max, 10)
+            elif eval_score_range == "0_to_1":
+                x_max = np.maximum(x_max, 1)
+            elif eval_score_range == "-1_to_1":
+                x_max = np.maximum(x_max, 1)
+                
+            
 
             lower_errors, upper_errors = self.calculate_errors(clean_df, y_column, x_column)
 
@@ -786,13 +796,10 @@ class LLMNumericScoreEvalTester:
                         )
                 if not show_only_medians:
                     df_category = clean_df[clean_df[y_column] == idx]
-                    jittered_values = df_category[x_column] + np.random.uniform(
-                        -jitter_magnitude, jitter_magnitude, size=len(df_category)
-                    )
 
                     if swap_axes:
                         ax.scatter(
-                            y=jittered_values,
+                            y=df_category[x_column],  # Use original x_column values
                             x=np.repeat(i, df_category.shape[0]),
                             s=circle_size,
                             edgecolors="gray",
@@ -801,7 +808,7 @@ class LLMNumericScoreEvalTester:
                         )
                     else:
                         ax.scatter(
-                            x=jittered_values,
+                            x=df_category[x_column],  # Use original x_column values
                             y=np.repeat(i, df_category.shape[0]),
                             s=circle_size,
                             edgecolors="gray",
@@ -809,18 +816,19 @@ class LLMNumericScoreEvalTester:
                             alpha=0.3,
                         )
 
+
                 if swap_axes:
                     ax.scatter(
-                        y=df_median.loc[idx, x_column], x=i, s=circle_size, c="firebrick"
+                        y=df_median.loc[idx, x_column], x=i, s=circle_size, c="grey"
                     )
                 else:
                     ax.scatter(
-                        x=df_median.loc[idx, x_column], y=i, s=circle_size, c="firebrick"
+                        x=df_median.loc[idx, x_column], y=i, s=circle_size, c="grey"
                     )
 
             if swap_axes:
-                ax.set_ylabel(f"LLM Eval {x_column}", alpha=0.7)
-                ax.set_xlabel(f"LLM Eval {y_column}", alpha=0.7)
+                ax.set_ylabel(f"LLM Eval {x_column} of {error_mode}", alpha=0.7)
+                ax.set_xlabel(f"LLM Eval {y_column} of {error_mode}", alpha=0.7)
                 ax.set_ylim(x_min, x_max)
                 ax.set_xlim(-1, len(df_median))
                 ax.set_xticks(range(len(df_median)))
@@ -830,7 +838,7 @@ class LLMNumericScoreEvalTester:
                     alpha=0.7,
                 )
             else:
-                ax.set_xlabel(f"LLM Eval {x_column}", alpha=0.7)
+                ax.set_xlabel(f"LLM Eval {x_column} of {error_mode} from model {model_name}", alpha=0.7)
                 ax.set_xlim(x_min, x_max)
                 ax.set_ylabel(f"LLM Eval {y_column}", alpha=0.7)
                 ax.set_yticks(range(len(df_median)))
@@ -847,7 +855,7 @@ class LLMNumericScoreEvalTester:
                 ms=10,
                 ls="",
                 mec=None,
-                color="firebrick",
+                color="grey",
                 label="Median",
             )
             if not show_only_medians:
@@ -865,7 +873,7 @@ class LLMNumericScoreEvalTester:
             else:
                 plt.legend(handles=[red_patch[0]], loc="lower right")
 
-            ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data", fontdict={"size": 22})
+            #ax.set_title(f"Distribution of Eval {x_column} by {y_column} insertion of " + error_mode + " data", fontdict={"size": 22})
 
             plt.xticks(alpha=0.7)
             plt.gca().spines["top"].set_visible(False)
@@ -878,7 +886,7 @@ class LLMNumericScoreEvalTester:
             output_png_path = run_name + "_graph.png"
             plt.savefig(output_png_path, bbox_inches="tight")
 
-            plt.show()
+            #plt.show()
 
 
 
