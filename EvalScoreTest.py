@@ -68,9 +68,9 @@ class LLMNumericScoreEvalTester:
         #############################################
         ## ERROR MODE Determines the type of test, we support 3
         #"spelling_errors" or "sadness or "frustration" 
-        error_mode="spelling_errors", 
+        error_mode="frustration", 
         #range options: 1_to_10, 0_to_1, -1_to_1
-        eval_score_range="0_to_1",
+        eval_score_range="-1_to_1",
         number_of_runs_per_context_length=5,
         #For spelling errors context token count can increase a lot, as error creates 2 tokens out of 1
         target_context_length=5000, 
@@ -337,16 +337,19 @@ class LLMNumericScoreEvalTester:
             raise ValueError("template_version must be a valid template name")
         
         if self.eval_score_range == "1_to_10":
+            templ_range = 10
             #10 is 100%, 7 is 70%, 5 is 50%, 2  is 20%, 1 is 0%
             simple_template = simple_template.format(templ_high=str(10), templ_low=str(1), templ_20_perc=str(2), 
                                                                     templ_50_perc=str(5), templ_70_perc=str(7),
                                                                     context="{context}")
         elif self.eval_score_range == "0_to_1":
+            templ_range = 1
             #1 is 100%, 0.7 is 70%, 0.5 is 50%, 0.2  is 20%, 0.1 is 0%
             simple_template = simple_template.format(templ_high=str(1), templ_low=str(0), templ_20_perc=str(0.2), 
                                                                     templ_50_perc=str(0.5), templ_70_perc=str(0.7),
                                                                     context="{context}")     
         elif self.eval_score_range == "-1_to_1":
+            templ_range = 2
             #1 is 100%, 0.4 is 70%, 0 is 50%, -0.4  is 20%, -1 is 0%
             simple_template = simple_template.format(templ_high=str(1), templ_low=str(-1), templ_20_perc=str(-0.4), 
                                                                     templ_50_perc=str(0), templ_70_perc=str(0.4),
@@ -456,7 +459,7 @@ class LLMNumericScoreEvalTester:
             + str(self.document_error_percent_intervals)
         ).replace("/", "_")
         df = pd.concat([df, test_results], axis=1)
-        jitter_magnitude = 0.15
+        jitter_magnitude = 0.04*(templ_range)/10  #We had a bug that made -1 to 1 look worse
         df['score_jitter'] = df['score'] + np.random.uniform(
             -jitter_magnitude, jitter_magnitude, size=len(df))       
         df['dp_string'] = df['corruption_percentage'].astype(str) 
