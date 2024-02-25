@@ -22,7 +22,7 @@ from phoenix.experimental.evals import (
 
 from google.cloud import aiplatform
 import vertexai.preview
-
+from transformers import T5Tokenizer
 
 
 load_dotenv()
@@ -47,6 +47,7 @@ class LLMNeedleHaystackTester:
                  #############################################
                  ###### UNCOMMMENT only 1 model name #########
                  #model_name='gpt-4-1106-preview',
+                 #model_name='gpt-3.5-turbo-1106',
                  #model_name='claude-2.1',
                  model_name='gemini-pro',
                  #model_name='gemini-pro-vision',
@@ -55,22 +56,24 @@ class LLMNeedleHaystackTester:
                  #model_name='mistral/mistral-tiny',
                  #model_name='mistralai/Mistral-7B-Instruct-v0.1'
                  #model_name='mistralai/Mixtral-8x7B-Instruct-v0.1'
+                 #model_name='together_ai/togethercomputer/llama-2-70b-chat',
+                 #model_name='huggingface/microsoft/phi-2',
                  #############################################
                  needle="",
                  haystack_dir="PaulGrahamEssays",
                  retrieval_question="What is the special magic {} number?",
                  results_version = 1,
                  rnd_number_digits = 7,
-                 context_lengths_min = 1000,
+                 context_lengths_min = 500,
                  context_lengths_max = 28000,
-                 #context_lengths_num_intervals = 5, #Uncomment for fast testing run
-                 context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
+                 context_lengths_num_intervals = 5, #Uncomment for fast testing run
+                 #context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
                  #context_lengths_num_intervals = 35, #Uncomment for high fidelity run
                  context_lengths = None,
                  document_depth_percent_min = 0,
                  document_depth_percent_max = 100,
-                 #document_depth_percent_intervals = 5, #Uncomment for fast testing run
-                 document_depth_percent_intervals = 10, #Nice balance between speed and fidelity
+                 document_depth_percent_intervals = 5, #Uncomment for fast testing run
+                 #document_depth_percent_intervals = 10, #Nice balance between speed and fidelity
                  #document_depth_percent_intervals = 35, #Uncomment for high fidelity run
                  document_depth_percents = None,
                  document_depth_percent_interval_type = "linear",
@@ -180,6 +183,8 @@ class LLMNeedleHaystackTester:
             self.enc = Anthropic().get_tokenizer()
         elif model_provider == "OpenAI":
             self.enc = tiktoken.encoding_for_model(self.model_name)
+        elif model_provider == "GoogleVertex":
+            self.enc = T5Tokenizer.from_pretrained("google-t5/t5-11b")
         else:
             self.enc = tiktoken.encoding_for_model("gpt-4")
 
@@ -271,6 +276,15 @@ The following is a set of context and a question that will relate to the context
 #QUESTION
 {question} Don't give information outside the document or repeat your findings. If the
 information is not available in the context respond UNANSWERABLE.'''
+
+    GEMINI_TEMPLATE2 = '''
+    <context>
+    {context}
+    </context>
+    {question} Don't give information outside the docuemtn or repeat your findings. 
+    Here is the magic number from the context:
+
+    '''
     #{question} You are looking for a number from the context. Don't give information outside the document or repeat your findings
 
     RANDOM_NEEDLE_CITIES  = [
@@ -311,7 +325,8 @@ information is not available in the context respond UNANSWERABLE.'''
             litellm.vertex_location = self.google_location
 
         elif self.model_provider == "GoogleVertex":
-            template =self.SIMPLE_TEMPLATE
+            #template =self.GEMINI_TEMPLATE2
+            template = self.SIMPLE_TEMPLATE
             aiplatform.init(
                 # your Google Cloud Project ID or number
                 # environment default used is not set
@@ -377,7 +392,7 @@ information is not available in the context respond UNANSWERABLE.'''
             template=template,
             model=model,
             verbose=True,
-            concurrency=15,
+            concurrency=1,
             # Callback function that will be called for each row of the dataframe
             # Used to find the needle in the haystack
             output_parser=find_needle_in_haystack,
@@ -573,7 +588,10 @@ information is not available in the context respond UNANSWERABLE.'''
         elif self.model_provider == "Anthropic":
             # Assuming you have a different encoder for Anthropic
             return self.enc.encode(context).ids
+        elif self.model_provider == "GoogleVertex": 
+            return self.enc.encode(context)
         else:
+
             return self.enc.encode(context)
             #raise ValueError("model_provider must be either 'OpenAI' or 'Anthropic'")
         
