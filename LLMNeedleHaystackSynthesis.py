@@ -11,8 +11,9 @@ import random
 import nest_asyncio
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
-from phoenix.experimental.evals.models import LiteLLMModel
-from phoenix.experimental.evals.models.vertex import GeminiModel
+from phoenix.evals.models import LiteLLMModel
+from phoenix.evals.models.vertex import GeminiModel
+from phoenix.evals.models.anthropic import AnthropicModel
 import asyncio
 from phoenix.experimental.evals.utils import snap_to_rail
 from phoenix.experimental.evals import (
@@ -49,10 +50,12 @@ class LLMNeedleHaystackTester:
                  #model_provider = "GoogleVertex",
                  #############################################
                  ###### UNCOMMMENT only 1 model name #########
-                 model_name='gpt-4-1106-preview',
+                 #model_name='gpt-4-1106-preview',
+                 model_name='gpt-4-0125-preview',
                  #model_name='gpt-3.5-turbo-1106',
                  #model_name='claude-2.1',
                  #model_name='gemini-pro',
+                 #model_name='claude-3-opus-20240229',
                  #model_name='gemini-pro-vision',
                  #model_name='mistral/mistral-medium',
                  #model_name='mistral/mistral-small',
@@ -93,24 +96,25 @@ class LLMNeedleHaystackTester:
                                          ''',
                 retrieval_question_money = '''Please use use the {city} 2018_revenue and {city} 2019_revenue
                                          by using them to calculate the percent change from 2018 to 2019.
-                                         First calculate the values in millions keeping 3 most significant digits in decimal by rounding the 4th digit, then calculate the overall percentage 2019 
+                                         First calculate the values in millions keeping 2 most significant digits in decimal by rounding the 3rd digit, then calculate the overall percentage 2019 
                                          represents of 2018 revenue. Use the original numbers not the rounded numbers to calculate percent. This is not percentage change but just the percentage of 2019 revenue to 2018 revenue.
                                          Please round percentage to nearest whole number.
                                          For example:
-                                         if the 2018_revenue is 1235678 then convert to millions $1.236M (keep 3 digits and rounded 4th), 2019_revenue is 6579878 which is $6.579M and 2019 revenue is 532% of 2018 revenue
+                                         if the 2018_revenue is 1235678 then convert to millions $1.24M (keep 2 digits and rounded 3rd), 2019_revenue is 6579878 which is $6.58M and 2019 revenue is 532% of 2018 revenue
                                          the answer combines this as "$1.235M_$6.579M_532%"
 
-                                         if the 2018_revenue is 9859761 then convert to millions $9.860M (keep 3 digits and rounded 4th), 2019_revenue is 7934766 which is $7.934M and 2019 revenue is 80% of 2018 revenue
-                                         the answer combines this as "$9.859M_$7.934M_80%"
-                                         
+                                         if the 2018_revenue is 9859761 then convert to millions $9.86M (keep 2 digits and rounded 3rd), 2019_revenue is 7934766 which is $7.93M and 2019 revenue is 80% of 2018 revenue
+                                         the answer combines this as "$9.86M_$7.93M_80%"
+
+                                         Please remember to keep 2 digits in formatting this is correct $5.80m_$6.08m_105% this is not correct $5.8M_$6.08M_105% as the number in millions $5.80m dropped the 0 and $5.8m, that is not correcet.
                                          ''',
-                                         #Please explain yourself then answer the question.
                  join_str = None,
                  synth_type = "money", #date, date_mod, date_cut, random, money
-                 please_explain = False,
+                 please_explain = True,
+                 anthropic_template_version = "simple",
                  results_version = 1,
                  rnd_number_digits = 7,
-                 context_lengths_min = 500,
+                 context_lengths_min = 1000,
                  context_lengths_max = 110000,
                  #context_lengths_num_intervals = 5, #Uncomment for fast testing run
                  context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
@@ -125,7 +129,6 @@ class LLMNeedleHaystackTester:
                  document_depth_percent_interval_type = "linear",
                  #google_project='', #Use OS env GOOGLE_PROJECT
                  #google_location='', #Use OS env GOOGLE_LOCATION
-                 anthropic_template_version = "rev2",
                  openai_api_key=None,
                  anthropic_api_key = None,
                 save_results = False,
@@ -358,7 +361,7 @@ information is not available in the context respond UNANSWERABLE.'''
             model = OpenAIModel(model_name="gpt-4-1106-preview")
             template =self.SIMPLE_TEMPLATE
         elif self.model_provider == "Anthropic":
-            model = LiteLLMModel(model_name="claude-2.1", temperature=0.0)
+            model = AnthropicModel(model=self.model_name, temperature=0.0)
             if self.anthropic_template_version == "original":
                 template =self.ANTHROPIC_TEMPLATE_ORIGINAL
             elif self.anthropic_template_version == "rev1":
@@ -395,7 +398,7 @@ information is not available in the context respond UNANSWERABLE.'''
             for depth_percent in self.document_depth_percents:
                 # Randomly selecting a city
                 random_city = random.choice(LLMNeedleHaystackTester.RANDOM_NEEDLE_CITIES)
-                #Insert the needle 10o% of the time
+                #Insert the needle 100% of the time
                 insert_needle = True
                 if self.synth_type == "date" or self.synth_type == "date_mod" or self.synth_type == "date_cut" or self.synth_type == "random":
                     if self.synth_type == "date_mod" or self.synth_type == "date_cut" or self.synth_type == "random": # We will mod the number to get a month index (1-12)
@@ -509,9 +512,9 @@ information is not available in the context respond UNANSWERABLE.'''
             return_string = month_name + ":" + str(needle_rnd_number_2).zfill(2)
         elif synth_type == "money":
                 millions = int(needle_rnd_number_1) / 1_000_000
-                the_2019_rev = "${:.3f}M".format(millions)
+                the_2019_rev = "${:.2f}M".format(millions)
                 millions = int(needle_rnd_number_2) / 1_000_000
-                the_2018_rev = "${:.3f}M".format(millions)
+                the_2018_rev = "${:.2f}M".format(millions)
                 percentage = (int(needle_rnd_number_2)/ int(needle_rnd_number_1)) * 100
                 percent_string = "{:.0f}%".format(percentage)
                 return_string    = the_2019_rev + "_" + the_2018_rev + "_" + percent_string

@@ -11,8 +11,9 @@ import random
 import nest_asyncio
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
-from phoenix.experimental.evals.models import LiteLLMModel
-from phoenix.experimental.evals.models.vertex import GeminiModel
+from phoenix.evals.models import LiteLLMModel
+from phoenix.evals.models.vertex import GeminiModel
+from phoenix.evals.models.anthropic import AnthropicModel
 import asyncio
 from phoenix.experimental.evals.utils import snap_to_rail
 from phoenix.experimental.evals import (
@@ -37,19 +38,21 @@ class LLMNeedleHaystackTester:
     def __init__(self,
                  ###########################################
                  ###### UNCOMMMENT only 1 Provider #########
-                 #model_provider = "OpenAI",
+                 model_provider = "OpenAI",
                  #model_provider = "Anthropic",
                  #model_provider = "Perplexity",
                  #model_provider = "Anyscale",
                  #model_provider = "Mistral",
                  #model_provider = "LiteLLM",
-                 model_provider = "GoogleVertex",
+                 #model_provider = "GoogleVertex",
                  #############################################
                  ###### UNCOMMMENT only 1 model name #########
                  #model_name='gpt-4-1106-preview',
+                 model_name='gpt-4-0125-preview',
                  #model_name='gpt-3.5-turbo-1106',
                  #model_name='claude-2.1',
-                 model_name='gemini-pro',
+                 #model_name='claude-3-opus-20240229',
+                 #model_name='gemini-pro',
                  #model_name='gemini-pro-vision',
                  #model_name='mistral/mistral-medium',
                  #model_name='mistral/mistral-small',
@@ -64,22 +67,22 @@ class LLMNeedleHaystackTester:
                  retrieval_question="What is the special magic {} number?",
                  results_version = 1,
                  rnd_number_digits = 7,
-                 context_lengths_min = 500,
-                 context_lengths_max = 28000,
-                 context_lengths_num_intervals = 5, #Uncomment for fast testing run
-                 #context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
+                 context_lengths_min = 100,
+                 context_lengths_max = 110000,
+                 #context_lengths_num_intervals = 5, #Uncomment for fast testing run
+                 context_lengths_num_intervals = 10, #Nice balance between speed and fidelity
                  #context_lengths_num_intervals = 35, #Uncomment for high fidelity run
                  context_lengths = None,
                  document_depth_percent_min = 0,
                  document_depth_percent_max = 100,
-                 document_depth_percent_intervals = 5, #Uncomment for fast testing run
-                 #document_depth_percent_intervals = 10, #Nice balance between speed and fidelity
+                 #document_depth_percent_intervals = 5, #Uncomment for fast testing run
+                 document_depth_percent_intervals = 10, #Nice balance between speed and fidelity
                  #document_depth_percent_intervals = 35, #Uncomment for high fidelity run
                  document_depth_percents = None,
                  document_depth_percent_interval_type = "linear",
                  #google_project='', #Use OS env GOOGLE_PROJECT
                  #google_location='', #Use OS env GOOGLE_LOCATION
-                 anthropic_template_version = "rev2",
+                 anthropic_template_version = "rev1",
                  openai_api_key=None,
                  anthropic_api_key = None,
                 save_results = False,
@@ -281,7 +284,7 @@ information is not available in the context respond UNANSWERABLE.'''
     <context>
     {context}
     </context>
-    {question} Don't give information outside the docuemtn or repeat your findings. 
+    {question} Don't give information outside the document or repeat your findings. 
     Here is the magic number from the context:
 
     '''
@@ -310,11 +313,15 @@ information is not available in the context respond UNANSWERABLE.'''
             model = OpenAIModel(model_name="gpt-4-1106-preview")
             template =self.SIMPLE_TEMPLATE
         elif self.model_provider == "Anthropic":
-            model = LiteLLMModel(model_name="claude-2.1", temperature=0.0)
+            model = AnthropicModel(model=self.model_name, temperature=0.0)
             if self.anthropic_template_version == "original":
                 template =self.ANTHROPIC_TEMPLATE_ORIGINAL
             elif self.anthropic_template_version == "rev1":
                 template =self.ANTHROPIC_TEMPLATE_REV1
+            elif self.anthropic_template_version == "simple":
+                template =self.SIMPLE_TEMPLATE
+            elif self.anthropic_template_version == "rev2":
+                template =self.ANTHROPIC_TEMPLATE_REV2
             else:
                 template =self.ANTHROPIC_TEMPLATE_REV2
         elif self.model_provider == "LiteLLM":
@@ -325,8 +332,8 @@ information is not available in the context respond UNANSWERABLE.'''
             litellm.vertex_location = self.google_location
 
         elif self.model_provider == "GoogleVertex":
-            #template =self.GEMINI_TEMPLATE2
-            template = self.SIMPLE_TEMPLATE
+            template =self.GEMINI_TEMPLATE2
+            #template = self.SIMPLE_TEMPLATE
             aiplatform.init(
                 # your Google Cloud Project ID or number
                 # environment default used is not set
