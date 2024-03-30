@@ -82,30 +82,28 @@ class LLMNeedleHaystackTester:
                  #model_name='together_ai/togethercomputer/llama-2-70b-chat',
                  #model_name='huggingface/microsoft/phi-2',
                  #############################################
-                 time_series_type="20_to_26", #1_to_4 20_to_26
-                 num_time_series_days=30,
+                 #START PARAMETERS for Time series Test
+                 time_series_type="20_to_26", #1_to_4 20_to_26 #Settings for range of type series
+                 num_time_series_days=30, #number of days to generate time series
                 anomaly_dict={"Main": 
                                {"start_date": "random", "day_length": 1, "num_of_dimensions_with_anomaly":20, 
-                                "anomaly_type":"value_change_percent", "value":11 }  #value_change_percent value_change
-                               }, #"anomaly_low": 0, "anomaly_high": 100, "anomaly_n_days": 1, "anomaly_percent": 0.1
-                #anomaly_dict={"Main": 
-                #               {"start_date": datetime.now() + timedelta(days=5), "day_length": 1, "num_of_dimensions_with_anomaly":20, 
-                #                "anomaly_type":"value_change_percent", "value":11 }  #value_change_percent value_change
-                #               }, #"anomaly_low": 0, "anomaly_high": 100, "anomaly_n_days": 1, "anomaly_percent": 0.1
-                 format_type = "normal", #std_dev" "normal"
+                                "anomaly_type":"value_change_percent" }  #types supported value_change_percent value_change
+                               }, 
+                 format_type = "normal", #options "std_dev" "normal" #std_dev pre-calculates the standard deviation, puts in header
                  prompt_direction = "percent_move", # "std_dev", "10_point_move" "percent_move"
-                 anomaly_percentage = 90,
-                 prompt_percentage_detect = 40,
-                 noise_level_percent = 20,
-                 context_lengths_min = 30000, #Always inclusive of Min, interval = 1 wil linclude
-                 context_lengths_max = 110000, #Max will get include wiht interval 2+
-                 context_lengths_num_intervals = 4, #Nice balance between speed and fidelity
+                 anomaly_percentage = 90, #Move percentage for percent_move
+                 prompt_percentage_detect = 40, #Movement to detect for percent_move
+                 noise_level_percent = 20, #Noise level to add to time series
+                 context_lengths_min = 30000, #Context length min, stat size of context window
+                 context_lengths_max = 110000, #Context Length max, max size of context window
+                 context_lengths_num_intervals = 4, #How many context windows to test, between min and max                 
+                 #############################################
+                 #END Main PARAMETERS for Time series Test
+                 #Parameters below are from previous tests, not that relevant
                  context_lengths = None,
                  document_depth_percent_min = 0,
                  document_depth_percent_max = 100,
-                 #document_depth_percent_intervals = 5, #Uncomment for fast testing run
                  document_depth_percent_intervals = 30, #Nice balance between speed and fidelity
-                 #document_depth_percent_intervals = 35, #Uncomment for high fidelity run
                  document_depth_percents = None,
                  results_version = 1,
                  rnd_number_digits = 2,
