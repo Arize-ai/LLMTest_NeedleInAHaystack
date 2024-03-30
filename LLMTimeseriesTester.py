@@ -89,14 +89,14 @@ class LLMNeedleHaystackTester:
                                {"start_date": "random", "day_length": 1, "num_of_dimensions_with_anomaly":20, 
                                 "anomaly_type":"value_change_percent" }  #types supported value_change_percent value_change
                                }, 
-                 format_type = "normal", #options "std_dev" "normal" #std_dev pre-calculates the standard deviation, puts in header
-                 prompt_direction = "percent_move", # "std_dev", "10_point_move" "percent_move"
-                 anomaly_percentage = 90, #Move percentage for percent_move
-                 prompt_percentage_detect = 40, #Movement to detect for percent_move
-                 noise_level_percent = 20, #Noise level to add to time series
-                 context_lengths_min = 30000, #Context length min, stat size of context window
-                 context_lengths_max = 110000, #Context Length max, max size of context window
-                 context_lengths_num_intervals = 4, #How many context windows to test, between min and max                 
+                anomaly_percentage = 90, #How big to make the anomaly in percent_move
+                format_type = "normal", #options "std_dev" "normal" -- std_dev pre-calculates the standard deviation, puts in header
+                prompt_direction = "percent_move", # "std_dev", "10_point_move" "percent_move"
+                prompt_percentage_detect = 40, #Movement to detect for percent_move
+                noise_level_percent = 20, #Noise level to add to time series
+                context_lengths_min = 30000, #Context length min, stat size of context window
+                context_lengths_max = 110000, #Context Length max, max size of context window
+                context_lengths_num_intervals = 4, #How many context windows to test, between min and max                 
                  #############################################
                  #END Main PARAMETERS for Time series Test
                  #Parameters below are from previous tests, not that relevant
